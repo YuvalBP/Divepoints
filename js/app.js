@@ -168,7 +168,7 @@
     const cat = CATEGORIES[site.category] || CATEGORIES.other;
     return L.divIcon({
       className: "",
-      html: `<div class="site-marker${site.verified ? "" : " unverified"}" style="background:${st.hex}" title="${esc(site.name)}">${cat.icon}</div>`,
+      html: `<div class="site-marker${site.verified || site.src === "osm" ? "" : " unverified"}" style="background:${st.hex}" title="${esc(site.name)}">${cat.icon}</div>`,
       iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
     });
   }
@@ -182,7 +182,7 @@
       if (!visible.has(site.id)) continue;
       const status = siteStatus(site.id);
       if (site.line) {
-        L.polyline(site.line, { color: STATUSES[status].hex, weight: 5, opacity: 0.85, dashArray: site.verified ? null : "8 6" })
+        L.polyline(site.line, { color: STATUSES[status].hex, weight: 5, opacity: 0.85, dashArray: site.verified || site.src === "osm" ? null : "8 6" })
           .bindPopup(() => popupHtml(site.id))
           .addTo(markersLayer);
       }
@@ -224,7 +224,9 @@
       <div class="meta">${esc(cat.label)} · ${esc(REGIONS[site.region] || "")} · עומק ${fmtDepth(site.depth)} · סיכון ${esc(RISK[site.risk] || "—")}</div>
       <span class="badge" style="background:${STATUSES[status].hex}">${STATUSES[status].label}</span>
       <p>${esc(site.desc || "")}</p>
-      ${site.verified ? "" : `<div class="warn">⚠ מיקום משוער – יש לאמת בשטח (ניתן לגרור עם "תקן מיקום")</div>`}
+      ${site.verified ? "" : site.src === "osm"
+        ? `<div class="warn">📍 מיקום לפי OpenStreetMap – מומלץ לאמת בשטח</div>`
+        : `<div class="warn">⚠ מיקום משוער – יש לאמת בשטח (ניתן לגרור עם "תקן מיקום")</div>`}
       ${last ? `<div class="meta">סקר אחרון: ${esc(last.date)} · ${esc(SURVEY_STATUS[last.status])} · סה"כ ${surveys.length} סקרים</div>` : ""}
       <div class="meta">${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}</div>
       <div class="actions">
@@ -351,12 +353,15 @@
     $("#draw-undo").classList.toggle("hidden", !!handlers.noUndo);
     $("#draw-bar").classList.remove("hidden");
     $("#map").style.cursor = "crosshair";
+    // Let clicks pass through markers/lines so points can be placed on top of them.
+    $("#map").classList.toggle("drawing", !!handlers.click);
   }
   function endDrawMode() {
     drawMode = null;
     tempLayer.clearLayers();
     $("#draw-bar").classList.add("hidden");
     $("#map").style.cursor = "";
+    $("#map").classList.remove("drawing");
   }
   function updateDrawMsg(msg) { $("#draw-msg").textContent = msg; }
 
@@ -801,7 +806,7 @@
         kind: "site", id: site.id, name: site.name, category: CATEGORIES[site.category]?.label,
         region: REGIONS[site.region], depth: fmtDepth(site.depth), risk: RISK[site.risk],
         description: site.desc, status: STATUSES[siteStatus(site.id)].label,
-        location_verified: !!site.verified, last_survey: last ? last.date : "",
+        location_verified: !!site.verified, location_source: site.verified ? "field" : site.src === "osm" ? "OpenStreetMap" : "estimate", last_survey: last ? last.date : "",
         surveys: surveysFor(site.id).length,
       };
       features.push({ type: "Feature", properties: props,

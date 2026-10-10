@@ -151,3 +151,8 @@ legend { font-weight: 600; padding: 0 6px; }
 @media (min-width: 761px) {
   .sidebar.collapsed { display: none; }
 }
+
+/* While placing points on the map, markers and lines must not swallow clicks */
+#map.drawing .leaflet-marker-icon,
+#map.drawing .leaflet-interactive { pointer-events: none; }
+#map.drawing .leaflet-container, #map.drawing { cursor: crosshair; }
