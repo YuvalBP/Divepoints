@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>סקר רשתות רפאים</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="toggle-sidebar" class="icon-btn" title="רשימת אתרים">☰</button>
+    <h1>סקר רשתות רפאים – ים התיכון</h1>
+    <div class="topbar-actions">
+      <button id="add-site-btn" class="btn">+ אתר חדש</button>
+      <button id="data-btn" class="btn btn-ghost">נתונים</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside id="sidebar" class="sidebar">
+      <div class="stats" id="stats"></div>
+      <input id="search" type="search" placeholder="חיפוש אתר…">
+      <div class="filters">
+        <select id="filter-region">
+          <option value="">כל האזורים</option>
+          <option value="north">צפון (ראש הנקרה–עכו)</option>
+          <option value="carmel">חיפה וחוף הכרמל</option>
+          <option value="sharon">השרון</option>
+          <option value="center">גוש דן</option>
+          <option value="south">דרום</option>
+        </select>
+        <select id="filter-category">
+          <option value="">כל הסוגים</option>
+        </select>
+        <select id="filter-status">
+          <option value="">כל הסטטוסים</option>
+        </select>
+        <label class="check"><input type="checkbox" id="filter-shallow"> רק עד 15 מ'</label>
+      </div>
+      <ul id="site-list" class="site-list"></ul>
+      <div class="legend" id="legend"></div>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <!-- Floating toolbar for map-drawing modes -->
+  <div id="draw-bar" class="draw-bar hidden">
+    <span id="draw-msg"></span>
+    <button id="draw-undo" class="btn btn-ghost">בטל נקודה</button>
+    <button id="draw-done" class="btn">סיום</button>
+    <button id="draw-cancel" class="btn btn-ghost">ביטול</button>
+  </div>
+
+  <!-- Generic modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close icon-btn" id="modal-close" title="סגור">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="data/sites.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
