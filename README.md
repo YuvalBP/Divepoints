@@ -39,3 +39,13 @@
 ## עריכת רשימת האתרים
 `data/sites.js` – רשימה פשוטה; אחרי שמתקנים מיקומים בשטח כדאי לעדכן אותם גם כאן
 (עם `verified: true`). לא לשנות `id` של אתר שכבר יש לו סקרים.
+
+## מקורות נתונים ורישוי
+| שכבה | מקור | רישיון |
+|---|---|---|
+| תצלום לוויין (`tiles/`) | Sentinel-2 cloudless 2023 by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2023) | CC BY-NC-SA 4.0 – שימוש לא מסחרי |
+| עומקים וקווי עומק (`data/bathy.js`) | EMODnet Bathymetry DTM, ~115 מ' | CC BY 4.0 |
+| קו חוף, שמות מקומות, חלק מהאתרים | OpenStreetMap contributors | ODbL |
+
+כלי הבנייה נמצאים ב-`tools/`: `build_coast.py`, `build_bathy.py`, `build_places.py`, `build_artifact.py`.
+העומקים מהמודל הם הערכה בלבד ואינם לניווט.

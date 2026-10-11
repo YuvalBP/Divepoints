@@ -237,75 +237,93 @@
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const BAND_VAR = { 0: "--d0", 5: "--d5", 10: "--d10", 15: "--d15", 20: "--d20", 30: "--d30", 50: "--d50", 100: "--d100" };
   const POPUP_OPTS = { maxWidth: 300, minWidth: 290, autoPanPaddingTopLeft: [16, 64], autoPanPaddingBottomRight: [16, 64] };
-  let clusterLayer, linesLayer, chartLayers, isoLabels, chartOn = true;
+  const COAST_BOUNDS = [[31.3, 33.9], [33.35, 35.7]];
+  const EMPTY_TILE = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  const LABEL_ZOOM = { city: 9, town: 10, village: 12, mouth: 12, beach: 13 };
+  let clusterLayer, linesLayer, chartLayers, mapMode = "sat";
 
-  function bathyStyle(f) {
+  function bandStyle(f) {
     const p = f.properties;
-    if (p.kind === "band") return { stroke: false, fillOpacity: 1, fillColor: css(BAND_VAR[p.min] || "--deep") };
-    return { color: css("--isobath"), weight: p.depth <= 10 ? 0.5 : 0.8, opacity: 0.75, dashArray: p.depth <= 10 ? "3 3" : null };
+    return { stroke: false, fillOpacity: 1, fillColor: css(BAND_VAR[p.min] || "--deep") };
+  }
+  function isoStyle(f) {
+    const d = f.properties.depth;
+    const sat = mapMode === "sat";
+    return {
+      color: sat ? "#ffffff" : css("--isobath"),
+      weight: d <= 10 ? 0.6 : 0.9, opacity: sat ? 0.55 : 0.75, dashArray: d <= 10 ? "3 3" : null,
+    };
   }
   function landStyle() { return { color: css("--land-edge"), weight: 0.8, fillColor: css("--land"), fillOpacity: 1 }; }
-  function surveyStyle() { return { color: css("--survey"), weight: 2.4, opacity: 0.95 }; }
+  function surveyStyle() { return { color: css("--survey"), weight: mapMode === "sat" ? 3 : 2.4, opacity: 1 }; }
 
   function initMap() {
     map = L.map("map", {
       zoomControl: false, minZoom: 8, maxZoom: 18,
       // Keep the view on the charted coast (data covers 31.5–33.15 N).
-      maxBounds: [[31.3, 33.9], [33.35, 35.7]], maxBoundsViscosity: 0.8,
-    }).setView([32.55, 34.9], 9);
+      maxBounds: COAST_BOUNDS, maxBoundsViscosity: 0.8,
+    });
     map.attributionControl.setPrefix(false);
-    L.control.zoom({ position: "topleft", zoomInTitle: "התקרב", zoomOutTitle: "התרחק" }).addTo(map);
-    map.createPane("chart").style.zIndex = 250;
+    // Pane order, bottom to top: chart fill < satellite < isobaths <
+    // survey line < place labels < markers.
+    map.createPane("chart").style.zIndex = 150;
+    map.createPane("iso").style.zIndex = 380;
     map.createPane("surveyLine").style.zIndex = 420;
+    map.createPane("labels").style.zIndex = 450;
+    map.getPane("labels").style.pointerEvents = "none";
 
-    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
-    });
-    const sat = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 19, attribution: "Imagery &copy; Esri" });
-    const seamarks = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
-      maxZoom: 18, attribution: "&copy; OpenSeaMap",
-    });
+    // Satellite: Sentinel-2 tiles bundled with the page along the coastal
+    // strip. Three layers at different native zooms stack so the picture
+    // softens away from the coast instead of ending in a hard edge.
+    const satOpts = {
+      errorTileUrl: EMPTY_TILE, maxZoom: 18, bounds: COAST_BOUNDS,
+      attribution: 'Sentinel-2 cloudless 2023 by <a href="https://s2maps.eu" target="_blank" rel="noopener">EOX</a>',
+    };
+    const satellite = L.layerGroup([
+      // The wide layer also covers the hinterland, so the overview has no edge.
+      L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 8, maxNativeZoom: 10, bounds: [[30.9, 32.4], [33.7, 37.9]] })),
+      L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 11, maxNativeZoom: 12 })),
+      L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 13, maxNativeZoom: 14 })),
+    ]);
 
-    // Nautical chart from bundled data: depth bands and isobaths
-    // (EMODnet) under land polygons (OSM). Works offline and wherever
-    // map tiles are blocked.
+    // Chart: depth bands (EMODnet) under OSM land. Always drawn; it shows
+    // through wherever satellite tiles are missing.
     const canvas = L.canvas({ pane: "chart", padding: 0.3 });
     const feats = (window.BATHY && window.BATHY.features) || [];
-    const bathy = L.geoJSON({ type: "FeatureCollection", features: feats.filter((f) => !(f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT)) },
-      { renderer: canvas, interactive: false, style: bathyStyle, attribution: "עומקים &copy; EMODnet Bathymetry" });
+    const fc = (pred) => ({ type: "FeatureCollection", features: feats.filter(pred) });
+    const bands = L.geoJSON(fc((f) => f.properties.kind === "band"),
+      { renderer: canvas, interactive: false, style: bandStyle, attribution: "עומקים: EMODnet Bathymetry" });
     const land = L.geoJSON(window.COAST_LAND || null,
-      { renderer: canvas, interactive: false, style: landStyle, attribution: "קו חוף &copy; OpenStreetMap contributors" });
-    const chart = L.layerGroup([bathy, land]);
-    chartLayers = { bathy, land };
-
-    // The 15 m isobath: the outer edge of the survey belt, on every base map.
-    const surveyLine = L.geoJSON({ type: "FeatureCollection", features: feats.filter((f) => f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT) },
+      { renderer: canvas, interactive: false, style: landStyle, attribution: "© OpenStreetMap" });
+    const isobaths = L.geoJSON(fc((f) => f.properties.kind === "isobath" && f.properties.depth !== SHALLOW_LIMIT),
+      { renderer: L.canvas({ pane: "iso", padding: 0.3 }), interactive: false, style: isoStyle });
+    // The 15 m isobath: outer edge of the survey belt, always on top.
+    const surveyLine = L.geoJSON(fc((f) => f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT),
       { pane: "surveyLine", interactive: false, style: surveyStyle });
-    chartLayers.surveyLine = surveyLine;
+    chartLayers = { bands, land, isobaths, surveyLine, satellite };
 
-    // Depth figures along the isobaths, chart style; shown from zoom 11.
-    isoLabels = L.layerGroup();
+    // Labels: depth figures along isobaths + coastal place names. Which
+    // ones show is decided in CSS from the zoom classes on the container.
+    const labels = L.layerGroup();
     for (const f of feats) {
       const d = f.properties.depth;
-      if (f.properties.kind !== "isobath" || d > 100) continue;
+      if (f.properties.kind !== "isobath" || d > 50) continue;
       const cs = f.geometry.coordinates;
       if (cs.length < 12) continue;
       const step = Math.max(30, Math.floor(cs.length / 3));
       for (let i = Math.floor(step / 2); i < cs.length; i += step) {
-        isoLabels.addLayer(L.marker([cs[i][1], cs[i][0]], {
-          interactive: false, keyboard: false,
-          icon: L.divIcon({ className: "iso-label" + (d === SHALLOW_LIMIT ? " survey" : ""), html: String(d), iconSize: [22, 12], iconAnchor: [11, 6] }),
+        labels.addLayer(L.marker([cs[i][1], cs[i][0]], {
+          pane: "labels", interactive: false, keyboard: false,
+          icon: L.divIcon({ className: "map-label iso" + (d === SHALLOW_LIMIT ? " survey" : ""), html: `${d}`, iconSize: null }),
         }));
       }
     }
-    const syncLabels = () => {
-      const show = chartOn && map.getZoom() >= 11;
-      if (show && !map.hasLayer(isoLabels)) isoLabels.addTo(map);
-      if (!show && map.hasLayer(isoLabels)) map.removeLayer(isoLabels);
-    };
-    map.on("zoomend", syncLabels);
+    for (const p of window.PLACES || []) {
+      labels.addLayer(L.marker([p.lat, p.lng], {
+        pane: "labels", interactive: false, keyboard: false,
+        icon: L.divIcon({ className: `map-label place k-${p.k}`, html: esc(p.n), iconSize: null }),
+      }));
+    }
 
     linesLayer = L.layerGroup();
     clusterLayer = L.markerClusterGroup
@@ -317,59 +335,101 @@
     routesLayer = L.layerGroup();
     tempLayer = L.layerGroup();
 
-    chart.addTo(map);
-    const bases = { "מפה ימית": chart };
-    const overlays = { "גבול רצועת הסקר (15 מ')": surveyLine, "מסלולי סקרים וממצאים": routesLayer };
-    if (!IN_CLAUDE) {
-      bases["תצלום אוויר"] = sat;
-      bases["מפת רחובות"] = osm;
-      overlays["סימוני ים (OpenSeaMap)"] = seamarks;
-    }
-    L.control.layers(bases, overlays, { position: "topleft" }).addTo(map);
-    map.on("baselayerchange", (e) => { chartOn = e.layer === chart; syncLabels(); });
-
-    surveyLine.addTo(map);
-    linesLayer.addTo(map);
-    clusterLayer.addTo(map);
-    routesLayer.addTo(map);
-    tempLayer.addTo(map);
-    addLegend();
+    [bands, land, satellite, isobaths, surveyLine, labels, linesLayer, clusterLayer, routesLayer, tempLayer]
+      .forEach((l) => l.addTo(map));
+    addMapControls();
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
-    syncLabels();
 
+    const syncZoom = () => {
+      const z = map.getZoom(), el = map.getContainer();
+      for (let i = 8; i <= 18; i++) el.classList.toggle("zg" + i, z >= i);
+    };
+    map.on("zoomend", syncZoom);
     map.on("click", onMapClick);
+    setMapMode(mapMode);
+    fitCoast();
+    syncZoom();
 
     // Follow theme switches (system setting or the viewer's own toggle).
-    const restyle = () => {
-      chartLayers.bathy.setStyle(bathyStyle);
-      chartLayers.land.setStyle(landStyle);
-      chartLayers.surveyLine.setStyle(surveyStyle);
-      renderMap();
-    };
+    const restyle = () => { restyleChart(); renderMap(); };
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", restyle);
     new MutationObserver(restyle).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
-  function addLegend() {
-    const Legend = L.Control.extend({
-      options: { position: "bottomleft" },
+  function restyleChart() {
+    chartLayers.bands.setStyle(bandStyle);
+    chartLayers.land.setStyle(landStyle);
+    chartLayers.isobaths.setStyle(isoStyle);
+    chartLayers.surveyLine.setStyle(surveyStyle);
+  }
+
+  function setMapMode(mode) {
+    mapMode = mode;
+    const sat = chartLayers.satellite;
+    if (mode === "sat" && !map.hasLayer(sat)) sat.addTo(map);
+    if (mode !== "sat" && map.hasLayer(sat)) map.removeLayer(sat);
+    map.getContainer().classList.toggle("mode-sat", mode === "sat");
+    document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+    restyleChart();
+  }
+
+  function fitCoast() {
+    const pts = allSites().map((s) => [s.lat, s.lng]);
+    if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] });
+    else map.setView([32.55, 34.9], 9);
+  }
+
+  // Map controls: base-map switch, depth-lines toggle, zoom, whole coast.
+  function addMapControls() {
+    const Tools = L.Control.extend({
+      options: { position: "topleft" },
       onAdd() {
-        const el = L.DomUtil.create("details", "legend");
-        if (!window.matchMedia("(max-width: 760px)").matches) el.open = true;
-        const depths = [0, 5, 10, 15, 20, 30, 50, 100];
-        el.innerHTML = `<summary>מקרא</summary>
-          <div class="ramp">${depths.map((d) => `<span style="background:var(${BAND_VAR[d]})"></span>`).join("")}</div>
-          <div class="ramp-labels">${depths.map((d) => `<span>${d}</span>`).join("")}</div>
-          <div class="row"><span class="survey-line"></span>15 מ' · גבול רצועת הסקר</div>
-          <div class="marks">${STATUS_ORDER.map((k) => `<span><i style="background:var(--st-${k});border:1.5px solid var(--st-unsurveyed-ink)"></i>${STATUSES[k].short}</span>`).join("")}
-            <span><i style="background:var(--survey)"></i>סיכון גבוה</span></div>
-          <div class="note">עומקים במטרים, EMODnet (~115 מ'). לא לניווט.</div>`;
+        const el = L.DomUtil.create("div", "map-tools");
+        el.innerHTML = `
+          <div class="seg" role="group" aria-label="סוג מפה">
+            <button type="button" data-mode="sat" aria-pressed="true">לוויין</button>
+            <button type="button" data-mode="chart" aria-pressed="false">מפה ימית</button>
+          </div>
+          <button type="button" class="tool" id="toggle-iso" aria-pressed="true" title="קווי עומק">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 5c3-2 5 2 8 0s4-1 6 0M2 9c3-2 5 2 8 0s4-1 6 0M2 13c3-2 5 2 8 0s4-1 6 0"/></svg>
+            <span>קווי עומק</span>
+          </button>
+          <div class="zoom" role="group" aria-label="זום">
+            <button type="button" class="tool icon" id="zoom-in" aria-label="התקרב">+</button>
+            <button type="button" class="tool icon" id="zoom-out" aria-label="התרחק">−</button>
+          </div>
+          <button type="button" class="tool icon" id="fit-coast" title="כל החוף" aria-label="הצג את כל החוף">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 6V2h4M12 2h4v4M16 12v4h-4M6 16H2v-4"/></svg>
+          </button>
+          <details class="legend">
+            <summary>מקרא</summary>
+            <div class="legend-body">
+              <div class="row"><span class="survey-line"></span>15 מ' · גבול רצועת הסקר</div>
+              <div class="row"><span class="iso-line"></span>קווי עומק 5–500 מ'</div>
+              <div class="marks">${STATUS_ORDER.map((k) => `<span><i style="background:var(--st-${k})"></i>${STATUSES[k].short}</span>`).join("")}
+                <span><i style="background:var(--survey)"></i>סיכון גבוה</span>
+                <span><i class="est"></i>מיקום משוער</span></div>
+              <div class="ramp-wrap"><div class="ramp">${[0, 5, 10, 15, 20, 30, 50, 100].map((d) => `<span style="background:var(${BAND_VAR[d]})"></span>`).join("")}</div>
+              <div class="ramp-labels">${[0, 5, 10, 15, 20, 30, 50, 100].map((d) => `<span>${d}</span>`).join("")}</div></div>
+              <div class="note">עומקים: EMODnet (~115 מ'), הערכה בלבד. לא לניווט.</div>
+            </div>
+          </details>`;
         L.DomEvent.disableClickPropagation(el);
         L.DomEvent.disableScrollPropagation(el);
+        el.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMapMode(b.dataset.mode)));
+        el.querySelector("#toggle-iso").addEventListener("click", (e) => {
+          const b = e.currentTarget, on = b.getAttribute("aria-pressed") !== "true";
+          b.setAttribute("aria-pressed", String(on));
+          [chartLayers.isobaths].forEach((l) => (on ? l.addTo(map) : map.removeLayer(l)));
+          map.getContainer().classList.toggle("no-iso", !on);
+        });
+        el.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
+        el.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
+        el.querySelector("#fit-coast").addEventListener("click", fitCoast);
         return el;
       },
     });
-    new Legend().addTo(map);
+    new Tools().addTo(map);
   }
 
   // Cluster badge: a ring split by survey status, so progress reads from
@@ -421,6 +481,8 @@
     for (const site of filteredSites()) {
       const status = siteStatus(site.id);
       if (site.line) {
+        // White casing keeps the line readable over dark water and imagery.
+        L.polyline(site.line, { color: "#ffffff", weight: 9, opacity: 0.85, lineCap: "round", interactive: false }).addTo(linesLayer);
         L.polyline(site.line, {
           color: css(status === "unsurveyed" ? "--st-unsurveyed-ink" : `--st-${status}`),
           weight: 5, opacity: 0.9, lineCap: "round", dashArray: isEstimate(site) ? "8 6" : null,
