@@ -60,8 +60,10 @@
 
   // -------------------------------------------------------------------- state
   const state = loadState();
-  let map, markersLayer, routesLayer, tempLayer;
+  let map, markersLayer, routesLayer, tempLayer, ridgeLayer, surveyLayer, ridgeRenderer;
   const markerById = {};
+  const surveyMarkerById = {};
+  let modalCleanup = null;
   let drawMode = null;     // { type, ... }
   let draft = null;        // survey currently being edited
   let gpsWatchId = null;
@@ -71,10 +73,11 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        return { customSites: s.customSites || [], siteEdits: s.siteEdits || {}, surveys: s.surveys || [] };
+        return { customSites: s.customSites || [], siteEdits: s.siteEdits || {}, surveys: s.surveys || [],
+          ridges: s.ridges || [], ridgeFlags: s.ridgeFlags || {} };
       }
     } catch (e) { console.error(e); }
-    return { customSites: [], siteEdits: {}, surveys: [] };
+    return { customSites: [], siteEdits: {}, surveys: [], ridges: [], ridgeFlags: {} };
   }
   function saveLocal() {
     if (db) return;
@@ -86,29 +89,42 @@
   }
 
   // ---------------------------------------------------------- shared store
-  // Collections in the shared store, keyed by state field.
-  const COLLECTIONS = { surveys: "surveys", customSites: "sites", siteEdits: "edits" };
-  let db = null;
+  // Collections in the shared store, keyed by state field. Both backends
+  // speak the same small API (collection/doc/set/delete/onSnapshot):
+  // Firestore on the hosted site, the artifact "db" capability on claude.ai.
+  const COLLECTIONS = { surveys: "surveys", customSites: "sites", siteEdits: "edits", ridges: "ridges", ridgeFlags: "ridgeFlags" };
+  const KEYED = new Set(["siteEdits", "ridgeFlags"]);   // kept as {id: data} maps
+  let db = null, backend = "local";                     // local | claude | firebase
+  let me = null, amOwner = false;                       // signed-in user (firebase)
+  let pendingWrites = false;
   let renderPending = false;
+  let unsubs = [];
 
   async function initSharedStore() {
-    if (!IN_CLAUDE) return;
-    let store = null;
-    try { store = await window.claude.use("db"); } catch (e) { store = null; }
-    if (!store) { setSyncBadge(); return; }
-    db = store;
+    if (IN_CLAUDE) {
+      let store = null;
+      try { store = await window.claude.use("db"); } catch (e) { store = null; }
+      if (store) { db = store; backend = "claude"; subscribeAll(); }
+      setSyncBadge();
+      return;
+    }
+    if (window.FIREBASE_CONFIG) return initFirebase();
     setSyncBadge();
+  }
+
+  function subscribeAll() {
     for (const [key, coll] of Object.entries(COLLECTIONS)) {
-      db.collection(coll).onSnapshot((snap) => {
-        const rows = snap.docs.map((d) => Object.assign({}, clone(d.data()), { id: d.id }));
-        if (key === "siteEdits") {
-          state.siteEdits = {};
-          for (const r of rows) { const id = r.id; delete r.id; state.siteEdits[id] = r; }
+      unsubs.push(db.collection(coll).onSnapshot((snap) => {
+        const rows = snap.docs.map((d) => Object.assign({}, decodePts(clone(d.data())), { id: d.id }));
+        if (KEYED.has(key)) {
+          state[key] = {};
+          for (const r of rows) { const id = r.id; delete r.id; state[key][id] = r; }
         } else {
           state[key] = rows;
         }
+        if (snap.metadata) { pendingWrites = !!snap.metadata.hasPendingWrites; setSyncBadge(); }
         requestRender();
-      }, () => toast("הסנכרון עם הצוות נעצר. רענן את הדף."));
+      }, (e) => toast("הסנכרון עם הצוות נעצר" + (e && e.message ? ": " + e.message : "") + ". רענן את הדף.")));
     }
   }
 
@@ -116,19 +132,38 @@
   // updated by the caller; the shared store echoes the change back.
   async function persist(key, id, data) {
     if (!db) { saveLocal(); return true; }
-    try {
-      const ref = db.collection(COLLECTIONS[key]).doc(id);
-      if (data) await ref.set(clone(data)); else await ref.delete();
+    const ref = db.collection(COLLECTIONS[key]).doc(id);
+    const op = data ? ref.set(encodePts(clone(data))) : ref.delete();
+    if (backend === "firebase") {
+      // Firestore applies the write locally at once and syncs when there is
+      // reception; its promise settles only on server ack, so don't wait.
+      op.catch(writeFailed);
       return true;
-    } catch (e) {
-      toast(e && e.code === "invalid_argument"
-        ? "אין לך הרשאה לשמור בנתוני הצוות – בקש מבעל המפה הרשאת עריכה."
-        : "השמירה נכשלה: " + ((e && e.message) || "שגיאה לא ידועה"));
-      return false;
     }
+    try { await op; return true; } catch (e) { writeFailed(e); return false; }
+  }
+  function writeFailed(e) {
+    const denied = e && (e.code === "invalid_argument" || e.code === "permission-denied");
+    toast(denied ? "אין לך הרשאת כתיבה לנתוני הצוות." : "השמירה נכשלה: " + ((e && e.message) || "שגיאה לא ידועה"));
   }
 
   function clone(o) { return JSON.parse(JSON.stringify(o || {})); }
+
+  // Firestore can't hold nested arrays, so point lists ([[lat, lng], …])
+  // travel as [{lat, lng}, …] and are turned back on the way in.
+  const POINT_FIELDS = ["route", "coords"];
+  function encodePts(o) {
+    for (const k of POINT_FIELDS) {
+      if (Array.isArray(o[k]) && Array.isArray(o[k][0])) o[k] = o[k].map(([lat, lng]) => ({ lat, lng }));
+    }
+    return o;
+  }
+  function decodePts(o) {
+    for (const k of POINT_FIELDS) {
+      if (Array.isArray(o[k]) && o[k][0] && !Array.isArray(o[k][0])) o[k] = o[k].map((p) => [p.lat, p.lng]);
+    }
+    return o;
+  }
 
   // Re-render from snapshots, but never while the user is placing or
   // dragging something on the map (that would drop their marker).
@@ -140,8 +175,181 @@
   function setSyncBadge() {
     const el = $("#sync");
     if (!el) return;
-    el.textContent = db ? "משותף לכל הצוות" : "נשמר במכשיר הזה בלבד";
-    el.className = "sync " + (db ? "shared" : "local");
+    const st = !db ? "local" : pendingWrites ? "pending" : "shared";
+    el.textContent = { local: "במכשיר הזה בלבד", pending: "ממתין לקליטה…", shared: "מסונכרן" }[st];
+    el.className = "sync " + st;
+    el.title = { local: "הנתונים נשמרים רק בדפדפן הזה", pending: "השינויים נשמרו בטלפון ויישלחו לצוות כשתהיה קליטה", shared: "כל השינויים משותפים עם הצוות" }[st];
+  }
+
+  // ------------------------------------------------------------- firebase
+  const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = resolve; s.onerror = () => reject(new Error("לא נטען: " + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function initFirebase() {
+    showGate("loading");
+    try {
+      for (const f of ["firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"]) {
+        await loadScript(FIREBASE_SDK + f);
+      }
+    } catch (e) { showGate("error"); return; }
+    const cfg = window.FIREBASE_CONFIG;
+    firebase.initializeApp(cfg);
+    const auth = firebase.auth(), fs = firebase.firestore();
+    if (cfg.emulatorHost) {
+      auth.useEmulator(`http://${cfg.emulatorHost}:9099`);
+      fs.useEmulator(cfg.emulatorHost, 8080);
+    }
+    // Offline cache: surveys entered at sea sync when reception returns.
+    try { await fs.enablePersistence({ synchronizeTabs: true }); } catch (e) { /* private window: online only */ }
+    auth.getRedirectResult().catch((e) => toast("הכניסה נכשלה: " + e.message));
+    auth.onAuthStateChanged((user) => onAuth(user, fs));
+  }
+
+  async function onAuth(user, fs) {
+    unsubs.forEach((u) => u()); unsubs = [];
+    db = null; backend = "local"; me = null; amOwner = false;
+    if (!user) { renderUser(); setSyncBadge(); showGate("signin"); return; }
+    me = { uid: user.uid, name: user.displayName || user.email, email: (user.email || "").toLowerCase() };
+    renderUser();
+    showGate("loading");
+    try {
+      // The first person to sign in after setup becomes the map's manager.
+      const ownerRef = fs.collection("meta").doc("owner");
+      let owner = await ownerRef.get();
+      if (!owner.exists) {
+        await ownerRef.set({ email: me.email, name: me.name, since: Date.now() });
+        owner = await ownerRef.get();
+      }
+      amOwner = owner.data().email === me.email;
+      if (!amOwner) {
+        const m = await fs.collection("team").doc(me.email).get();   // rules deny non-members
+        if (!m.exists) throw { code: "permission-denied" };
+      }
+    } catch (e) {
+      showGate(e && e.code === "permission-denied" ? "denied" : "error");
+      return;
+    }
+    hideGate();
+    db = fs; backend = "firebase";
+    subscribeAll();
+    setSyncBadge();
+    renderUser();
+    offerLocalUpload();
+  }
+
+  async function signIn() {
+    const auth = firebase.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    try {
+      await auth.signInWithPopup(provider);
+    } catch (e) {
+      const redirect = ["auth/popup-blocked", "auth/operation-not-supported-in-this-environment", "auth/cancelled-popup-request"];
+      if (redirect.includes(e.code)) return auth.signInWithRedirect(provider);
+      if (e.code !== "auth/popup-closed-by-user") toast("הכניסה נכשלה: " + e.message);
+    }
+  }
+  function signOut() { if (window.firebase) firebase.auth().signOut(); }
+
+  // Full-screen gate over the app while signed out or without access.
+  function showGate(kind) {
+    const g = $("#gate");
+    const views = {
+      loading: { t: "רגע…", p: "מתחבר לנתוני הצוות.", a: "" },
+      signin: {
+        t: "כניסת צוות",
+        p: "המפה ויומן הסקרים משותפים לחברי הצוות בלבד. נכנסים פעם אחת עם חשבון Google, וכל נקודה שדוקרים נשמרת לכולם.",
+        a: `<button class="btn btn-google" id="gate-signin"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>כניסה עם Google</button>`,
+      },
+      denied: {
+        t: "עדיין אין לך גישה",
+        p: `החשבון <b class="mono">${esc(me ? me.email : "")}</b> לא נמצא ברשימת הצוות. שלחו את הכתובת הזו למנהל המפה כדי שיוסיף אתכם, ואז רעננו את הדף.`,
+        a: `<button class="btn" id="gate-copy">העתק את המייל</button><button class="btn btn-ghost" id="gate-switch">החלף חשבון</button>`,
+      },
+      error: {
+        t: "אין חיבור לנתוני הצוות",
+        p: "לא הצלחנו להתחבר לשרת. בדקו שיש קליטה ונסו שוב. אם נכנסתם בעבר מהמכשיר הזה, הנתונים האחרונים יופיעו גם בלי קליטה.",
+        a: `<button class="btn btn-primary" id="gate-retry">נסו שוב</button>`,
+      },
+    };
+    const v = views[kind];
+    $("#gate-title").textContent = v.t;
+    $("#gate-text").innerHTML = v.p;
+    $("#gate-actions").innerHTML = v.a;
+    g.classList.toggle("loading", kind === "loading");
+    g.classList.remove("hidden");
+    const on = (id, fn) => { const b = $(id); if (b) b.addEventListener("click", fn); };
+    on("#gate-signin", signIn);
+    on("#gate-switch", signOut);
+    on("#gate-retry", () => location.reload());
+    on("#gate-copy", () => {
+      navigator.clipboard.writeText(me.email).then(() => toast("המייל הועתק"), () => toast(me.email));
+    });
+  }
+  function hideGate() { $("#gate").classList.add("hidden"); }
+
+  function renderUser() {
+    const el = $("#menu-user");
+    if (el) el.innerHTML = me ? `<b>${esc(me.name)}</b><span class="mono">${esc(me.email)}</span>${amOwner ? `<span class="tag">מנהל המפה</span>` : ""}` : "";
+    document.body.classList.toggle("signed-in", !!me);
+    document.body.classList.toggle("is-owner", amOwner);
+  }
+
+  // Surveys saved on this device before team sync was set up.
+  function localBacklog() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      const known = new Set(state.surveys.map((x) => x.id));
+      return { surveys: (s.surveys || []).filter((x) => !known.has(x.id)), customSites: s.customSites || [] };
+    } catch (e) { return { surveys: [], customSites: [] }; }
+  }
+  function offerLocalUpload() {
+    setTimeout(() => {
+      const b = localBacklog();
+      if (b.surveys.length) toast(`יש ${b.surveys.length} סקרים שנשמרו רק במכשיר הזה. אפשר להעלות אותם לצוות מהתפריט ← נתונים.`);
+    }, 2500);
+  }
+
+  // Team list, managed by the map's manager.
+  function openTeam() {
+    const fs = firebase.firestore();
+    openModal(`<h2>ניהול צוות</h2>
+      <p class="sub">רק מי שברשימה יכול לראות ולערוך את יומן הסקרים. כל אחד נכנס עם חשבון Google שלו.</p>
+      <form id="team-form" class="team-add">
+        <input id="team-email" type="email" required placeholder="name@gmail.com" aria-label="מייל של חבר צוות" dir="ltr">
+        <button class="btn btn-primary">הוסף לצוות</button>
+      </form>
+      <ul class="team-list" id="team-list"><li class="hint">טוען…</li></ul>
+      <p class="hint">מנהל המפה: <span class="mono">${esc(me.email)}</span></p>`);
+    const unsub = fs.collection("team").onSnapshot((snap) => {
+      const el = $("#team-list");
+      if (!el) return;
+      el.innerHTML = snap.docs.length
+        ? snap.docs.map((d) => `<li><span class="mono" dir="ltr">${esc(d.id)}</span><button class="btn btn-ghost small" data-rm="${esc(d.id)}">הסר</button></li>`).join("")
+        : `<li class="hint">עדיין אין חברי צוות. הוסיפו את כתובות ה-Gmail של הצוללים.</li>`;
+    }, writeFailed);
+    modalCleanup = unsub;
+    $("#team-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const em = $("#team-email").value.trim().toLowerCase();
+      if (!em) return;
+      fs.collection("team").doc(em).set({ addedBy: me.email, addedAt: Date.now() }).catch(writeFailed);
+      $("#team-email").value = "";
+      toast(`${em} נוסף לצוות`);
+    });
+    $("#team-list").addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-rm]");
+      if (!b) return;
+      if (await confirmDialog(`להסיר את ${b.dataset.rm} מהצוות?`, "הסר")) {
+        fs.collection("team").doc(b.dataset.rm).delete().catch(writeFailed);
+      }
+    });
   }
 
   // ------------------------------------------------------------------ helpers
@@ -268,6 +476,7 @@
     // survey line < place labels < markers.
     map.createPane("chart").style.zIndex = 150;
     map.createPane("iso").style.zIndex = 380;
+    map.createPane("ridges").style.zIndex = 390;
     map.createPane("surveyLine").style.zIndex = 420;
     map.createPane("labels").style.zIndex = 450;
     map.getPane("labels").style.pointerEvents = "none";
@@ -334,6 +543,9 @@
     }
 
     linesLayer = L.layerGroup();
+    ridgeLayer = L.layerGroup();
+    surveyLayer = L.layerGroup();
+    ridgeRenderer = L.canvas({ pane: "ridges", padding: 0.3 });
     clusterLayer = L.markerClusterGroup
       ? L.markerClusterGroup({
           showCoverageOnHover: false, maxClusterRadius: 46, disableClusteringAtZoom: 13,
@@ -343,7 +555,7 @@
     routesLayer = L.layerGroup();
     tempLayer = L.layerGroup();
 
-    [bands, land, satellite, isobaths, surveyLine, labels, linesLayer, clusterLayer, routesLayer, tempLayer]
+    [bands, land, satellite, isobaths, surveyLine, labels, ridgeLayer, linesLayer, clusterLayer, routesLayer, surveyLayer, tempLayer]
       .forEach((l) => l.addTo(map));
     addMapControls();
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
@@ -362,7 +574,7 @@
     syncZoom();
 
     // Follow theme switches (system setting or the viewer's own toggle).
-    const restyle = () => { restyleChart(); renderMap(); };
+    const restyle = () => { restyleChart(); renderMap(); renderRidges(true); };
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", restyle);
     new MutationObserver(restyle).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
@@ -394,6 +606,7 @@
     map.getContainer().classList.toggle("mode-streets", mode === "streets");
     document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
     restyleChart();
+    if (ridgeLayer) renderRidges();
   }
 
   function fitCoast() {
@@ -414,10 +627,16 @@
             <button type="button" data-mode="chart" aria-pressed="false">מפה ימית</button>
             ${IN_CLAUDE ? "" : `<button type="button" data-mode="streets" aria-pressed="false">רחובות</button>`}
           </div>
-          <button type="button" class="tool" id="toggle-iso" aria-pressed="true" title="קווי עומק">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 5c3-2 5 2 8 0s4-1 6 0M2 9c3-2 5 2 8 0s4-1 6 0M2 13c3-2 5 2 8 0s4-1 6 0"/></svg>
-            <span>קווי עומק</span>
-          </button>
+          <details class="layers" id="layers">
+            <summary><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M9 2l7 4-7 4-7-4 7-4z"/><path d="M2 9.5l7 4 7-4M2 13l7 4 7-4"/></svg><span>שכבות</span></summary>
+            <div class="layers-body">
+              <label><input type="checkbox" data-layer="surveys" checked><i class="sw survey"></i>נקודות סקר</label>
+              <label><input type="checkbox" data-layer="routes" checked><i class="sw route"></i>מסלולים וממצאים</label>
+              <label><input type="checkbox" data-layer="ridges" checked><i class="sw ridge"></i>רכסים תת-ימיים</label>
+              <label><input type="checkbox" data-layer="sites" checked><i class="sw site"></i>אתרי צלילה מוכרזים</label>
+              <label><input type="checkbox" data-layer="iso" checked><i class="sw iso"></i>קווי עומק</label>
+            </div>
+          </details>
           <div class="zoom" role="group" aria-label="זום">
             <button type="button" class="tool icon" id="zoom-in" aria-label="התקרב">+</button>
             <button type="button" class="tool icon" id="zoom-out" aria-label="התרחק">−</button>
@@ -430,6 +649,8 @@
             <div class="legend-body">
               <div class="row"><span class="survey-line"></span>15 מ' · גבול רצועת הסקר</div>
               <div class="row"><span class="iso-line"></span>קווי עומק 5–500 מ'</div>
+              <div class="row"><span class="ridge-swatch"></span>רכס משוער (מקווקו) / מסומן ע"י הצוות</div>
+              <div class="row"><span class="survey-pin legend-pin"></span>נקודת סקר, בצבע התוצאה</div>
               <div class="marks">${STATUS_ORDER.map((k) => `<span><i style="background:var(--st-${k})"></i>${STATUSES[k].short}</span>`).join("")}
                 <span><i style="background:var(--survey)"></i>סיכון גבוה</span>
                 <span><i class="est"></i>מיקום משוער</span></div>
@@ -441,12 +662,7 @@
         L.DomEvent.disableClickPropagation(el);
         L.DomEvent.disableScrollPropagation(el);
         el.querySelectorAll("[data-mode]").forEach((b) => b.addEventListener("click", () => setMapMode(b.dataset.mode)));
-        el.querySelector("#toggle-iso").addEventListener("click", (e) => {
-          const b = e.currentTarget, on = b.getAttribute("aria-pressed") !== "true";
-          b.setAttribute("aria-pressed", String(on));
-          [chartLayers.isobaths].forEach((l) => (on ? l.addTo(map) : map.removeLayer(l)));
-          map.getContainer().classList.toggle("no-iso", !on);
-        });
+        el.querySelectorAll("[data-layer]").forEach((cb) => cb.addEventListener("change", () => setLayer(cb.dataset.layer, cb.checked)));
         el.querySelector("#zoom-in").addEventListener("click", () => map.zoomIn());
         el.querySelector("#zoom-out").addEventListener("click", () => map.zoomOut());
         el.querySelector("#fit-coast").addEventListener("click", fitCoast);
@@ -539,6 +755,277 @@
         }
       }
     }
+  }
+
+  // ------------------------------------------------------------ survey points
+  // A survey is its own point on the map; linking it to a declared dive
+  // site is optional.
+  function surveyLoc(s) {
+    if (s.lat != null && s.lng != null) return [s.lat, s.lng];
+    const site = s.siteId && getSite(s.siteId);
+    return site ? [site.lat, site.lng] : null;
+  }
+  function surveyTitle(s) {
+    const site = s.siteId && getSite(s.siteId);
+    return s.place || (site && site.name) || "נקודת סקר";
+  }
+  function nearbySites(lat, lng, km) {
+    const here = L.latLng(lat, lng);
+    return allSites().map((x) => ({ site: x, d: here.distanceTo([x.lat, x.lng]) }))
+      .filter((x) => x.d <= km * 1000).sort((a, b) => a.d - b.d);
+  }
+  function findingsCount(s) { return (s.findings || []).length; }
+  function removedCount(s) { return (s.findings || []).filter((f) => f.removed === "yes").length; }
+
+  function renderSurveys() {
+    surveyLayer.clearLayers();
+    for (const k in surveyMarkerById) delete surveyMarkerById[k];
+    for (const s of state.surveys) {
+      if (s.lat == null) continue;   // older site-only surveys show on the site marker
+      const k = surveyStatusKey(s);
+      surveyMarkerById[s.id] = L.marker([s.lat, s.lng], {
+        title: surveyTitle(s), riseOnHover: true, zIndexOffset: 500,
+        icon: L.divIcon({ className: "", html: `<div class="survey-pin" style="--st:var(--st-${k})"></div>`, iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -12] }),
+      }).bindPopup(() => surveyPopupHtml(s.id), POPUP_OPTS).addTo(surveyLayer);
+    }
+  }
+
+  function surveyPopupHtml(id) {
+    const s = state.surveys.find((x) => x.id === id);
+    if (!s) return "";
+    const k = surveyStatusKey(s);
+    const site = s.siteId && getSite(s.siteId);
+    const loc = surveyLoc(s);
+    const by = s.createdBy && s.createdBy.name;
+    return `<div style="--st:var(--st-${k})">
+      <div class="card-status"><i></i>${STATUSES[k].label} · ${esc(fmtDate(s.date))}</div>
+      <div class="card-body">
+        <div><div class="hint">נקודת סקר${site ? ` · ${esc(site.name)}` : ""}</div><h3>${esc(surveyTitle(s))}</h3></div>
+        <dl class="facts">
+          <div><dt>ממצאים</dt><dd>${findingsCount(s)}</dd></div>
+          <div><dt>הוסרו</dt><dd>${removedCount(s)}</dd></div>
+          <div><dt>עומק מקס'</dt><dd>${s.dive && s.dive.maxDepth ? esc(s.dive.maxDepth) + " מ'" : "—"}</dd></div>
+        </dl>
+        ${s.team ? `<p><b>צוות:</b> ${esc(s.team)}</p>` : ""}
+        ${s.siteDescription ? `<p>${esc(s.siteDescription)}</p>` : ""}
+        <div class="coords"><span>${ddm(loc[0], "N", "S", 2)} ${ddm(loc[1], "E", "W", 3)}</span><span class="src">${by ? "נרשם ע\"י " + esc(by) : ""}</span></div>
+        <div class="card-actions">
+          <button class="btn btn-primary small" data-act="edit-survey" data-id="${esc(s.id)}">פתח סקר</button>
+          <button class="btn small" data-act="survey-here" data-lat="${loc[0]}" data-lng="${loc[1]}">סקר חוזר כאן</button>
+          <a class="btn btn-ghost small" href="https://www.google.com/maps/search/?api=1&query=${loc[0]},${loc[1]}" target="_blank" rel="noopener">ניווט</a>
+        </div>
+      </div></div>`;
+  }
+
+  function focusSurvey(id) {
+    const s = state.surveys.find((x) => x.id === id);
+    if (!s) return;
+    if (isPhone()) $("#panel").classList.remove("open");
+    const loc = surveyLoc(s);
+    if (!loc) { openSurveyForm(clone(s)); return; }
+    if (s.lat == null && s.siteId) { focusSite(s.siteId); return; }
+    setLayer("surveys", true);
+    map.setView(loc, Math.max(map.getZoom(), 15));
+    setTimeout(() => surveyMarkerById[id] && surveyMarkerById[id].openPopup(), 400);
+  }
+
+  function startNewSurvey() {
+    setLayer("surveys", true);
+    setDrawMode({ type: "new-survey" }, "לחצו על המפה במקום שבו נעשה הסקר", {
+      noUndo: true,
+      click: (ll) => { endDrawMode(); openSurveyForm(newSurvey(null, ll)); },
+      done: () => {},
+    });
+  }
+
+  // ------------------------------------------------------------------ ridges
+  // Auto-detected candidates (from imagery) plus ridges the team draws.
+  // A wrong candidate is hidden for everyone through a shared flag.
+  function ridgeStyle(manual) {
+    return () => ({
+      color: css("--ridge"), weight: manual ? 2 : 1.2, opacity: 0.95, dashArray: manual ? null : "4 3",
+      fillColor: css("--ridge"), fillOpacity: mapMode === "sat" ? 0.18 : 0.34,
+    });
+  }
+  let ridgeSig = "";
+  function renderRidges(force) {
+    const sig = JSON.stringify([state.ridgeFlags, state.ridges.map((r) => r.id + ":" + (r.updatedAt || "")), mapMode]);
+    if (!force && sig === ridgeSig) return;
+    ridgeSig = sig;
+    ridgeLayer.clearLayers();
+    const hidden = (id) => state.ridgeFlags[id] && state.ridgeFlags[id].hidden;
+    const auto = ((window.AUTO_RIDGES && window.AUTO_RIDGES.features) || []).filter((f) => !hidden(f.properties.id));
+    L.geoJSON({ type: "FeatureCollection", features: auto }, {
+      renderer: ridgeRenderer, style: ridgeStyle(false),
+      onEachFeature: (f, l) => l.on("click", (e) => openRidgePopup(e.latlng, { auto: true, id: f.properties.id, area: f.properties.area })),
+    }).addTo(ridgeLayer);
+    for (const r of state.ridges) {
+      L.polygon(r.coords, Object.assign({ renderer: ridgeRenderer }, ridgeStyle(true)()))
+        .on("click", (e) => openRidgePopup(e.latlng, { auto: false, id: r.id, area: polygonArea(r.coords), r }))
+        .addTo(ridgeLayer);
+    }
+  }
+  function polygonArea(coords) {   // m², local equirectangular approximation
+    if (!coords || coords.length < 3) return 0;
+    const k = 111320, c = Math.cos(coords[0][0] * Math.PI / 180);
+    let a = 0;
+    for (let i = 0; i < coords.length; i++) {
+      const [y1, x1] = coords[i], [y2, x2] = coords[(i + 1) % coords.length];
+      a += x1 * c * k * y2 * k - x2 * c * k * y1 * k;
+    }
+    return Math.abs(a / 2);
+  }
+  function surveysNear(latlng, m) {
+    return state.surveys.filter((s) => { const l = surveyLoc(s); return l && map.distance(latlng, l) <= m; }).length;
+  }
+  function openRidgePopup(latlng, info) {
+    if (drawMode) return;
+    const dunam = Math.max(1, Math.round(info.area / 1000));
+    const by = info.r && info.r.createdBy ? info.r.createdBy.name : "";
+    const html = `<div style="--st:var(--ridge)">
+      <div class="card-status"><i></i>${info.auto ? "זוהה אוטומטית מתצלום לוויין" : "סומן ידנית" + (by ? " ע\"י " + esc(by) : "")}</div>
+      <div class="card-body">
+        <div><div class="hint">רכס / קרקעית סלעית</div><h3>${info.auto ? "רכס משוער" : "רכס שסומן בשטח"}</h3></div>
+        <dl class="facts">
+          <div><dt>שטח</dt><dd>~${dunam} דונם</dd></div>
+          <div><dt>מקור</dt><dd>${info.auto ? "לוויין" : "צוות"}</dd></div>
+          <div><dt>סקרים עד 300 מ'</dt><dd>${surveysNear(latlng, 300)}</dd></div>
+        </dl>
+        ${info.auto ? `<p class="hint">אזור כהה מהחול שסביבו בתצלום Sentinel-2. לרוב סלע כורכר או צמחייה. יש לאמת בצלילה.</p>` : ""}
+        <div class="card-actions">
+          <button class="btn btn-primary small" data-act="survey-here" data-lat="${latlng.lat}" data-lng="${latlng.lng}">סקר כאן</button>
+          ${info.auto
+            ? `<button class="btn btn-ghost small" data-act="ridge-hide" data-id="${esc(info.id)}">זה לא רכס, הסתר</button>`
+            : `<button class="btn btn-ghost small" data-act="ridge-delete" data-id="${esc(info.id)}">מחק רכס</button>`}
+        </div>
+      </div></div>`;
+    L.popup(POPUP_OPTS).setLatLng(latlng).setContent(html).openOn(map);
+  }
+  function startDrawRidge() {
+    setLayer("ridges", true);
+    const pts = [];
+    const poly = L.polygon([], { color: css("--ridge"), weight: 2, fillOpacity: 0.25 }).addTo(tempLayer);
+    const msg = () => `לחצו סביב הרכס כדי לסמן אותו (${pts.length} נקודות)`;
+    setDrawMode({ type: "ridge" }, msg(), {
+      click: (ll) => { pts.push([+ll.lat.toFixed(6), +ll.lng.toFixed(6)]); poly.setLatLngs(pts); updateDrawMsg(msg()); },
+      undo: () => { pts.pop(); poly.setLatLngs(pts); updateDrawMsg(msg()); },
+      done: () => {
+        if (pts.length < 3) { toast("צריך לפחות 3 נקודות כדי לסמן רכס"); return; }
+        const r = { id: uid("ridge"), coords: pts, createdAt: Date.now(), updatedAt: Date.now() };
+        if (me) r.createdBy = { name: me.name, email: me.email };
+        state.ridges.push(r);
+        persist("ridges", r.id, r);
+        renderRidges(true);
+        toast("הרכס נשמר");
+      },
+      cancel: () => {},
+    });
+  }
+
+  // ------------------------------------------------------------------ layers
+  const LAYER_KEYS = ["surveys", "routes", "ridges", "sites", "iso"];
+  function layerObjects(key) {
+    return { sites: [clusterLayer, linesLayer], ridges: [ridgeLayer], surveys: [surveyLayer],
+      routes: [routesLayer], iso: [chartLayers.isobaths] }[key];
+  }
+  function setLayer(key, on) {
+    for (const l of layerObjects(key)) {
+      if (on && !map.hasLayer(l)) l.addTo(map);
+      if (!on && map.hasLayer(l)) map.removeLayer(l);
+    }
+    if (key === "iso") map.getContainer().classList.toggle("no-iso", !on);
+    const cb = document.querySelector(`[data-layer="${key}"]`);
+    if (cb) cb.checked = on;
+    try {
+      localStorage.setItem("divepoints-layers",
+        JSON.stringify(Object.fromEntries(LAYER_KEYS.map((k) => [k, map.hasLayer(layerObjects(k)[0])]))));
+    } catch (e) { /* storage unavailable: the choice just isn't remembered */ }
+  }
+  function restoreLayers() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem("divepoints-layers") || "{}"); } catch (e) { saved = {}; }
+    for (const k of LAYER_KEYS) setLayer(k, saved[k] !== false);
+  }
+
+  // ------------------------------------------------------------- survey log
+  let logFilter = "";
+  const MONTH = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric" });
+  function renderLog() {
+    const all = state.surveys;
+    const nets = all.filter((s) => s.netsFound === "yes").length;
+    const items = all.reduce((n, s) => n + findingsCount(s), 0);
+    const removed = all.reduce((n, s) => n + removedCount(s), 0);
+    $("#log-count").textContent = all.length;
+    $("#log-sub").innerHTML = `<span><b>${nets}</b> עם רשתות</span><span><b>${items}</b> ממצאים</span><span><b>${removed}</b> הוסרו</span>`;
+    const counts = {};
+    for (const s of all) { const k = surveyStatusKey(s); counts[k] = (counts[k] || 0) + 1; }
+    $("#log-chips").innerHTML = ["nets", "clean", "partial", "aborted"].map((k) =>
+      `<li><button class="chip" data-logf="${k}" aria-pressed="${logFilter === k}"><span class="sw" style="background:var(--st-${k})"></span>${STATUSES[k].short}<span class="n">${counts[k] || 0}</span></button></li>`).join("");
+    if (!all.length) {
+      $("#log-list").innerHTML = `<div class="empty"><span class="t">היומן ריק</span>לחצו על <b>+ סקר</b> ובחרו במפה את המקום שבו צללתם. אפשר גם לפתוח סקר מתוך אתר צלילה או מרכס.</div>`;
+      return;
+    }
+    const q = $("#log-search").value.trim();
+    const list = all.filter((s) => (!logFilter || surveyStatusKey(s) === logFilter) &&
+        (!q || [surveyTitle(s), s.team, s.siteDescription, s.createdBy && s.createdBy.name].some((v) => v && String(v).includes(q))))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+    if (!list.length) { $("#log-list").innerHTML = `<div class="empty">אין סקרים שמתאימים לסינון.</div>`; return; }
+    const html = [];
+    let month = "";
+    for (const s of list) {
+      const m = s.date ? MONTH.format(new Date(s.date + "T12:00:00")) : "ללא תאריך";
+      if (m !== month) {
+        if (month) html.push("</ul>");
+        month = m;
+        html.push(`<h2 class="group"><span>${esc(m)}</span></h2><ul class="site-list log">`);
+      }
+      const k = surveyStatusKey(s);
+      const n = findingsCount(s);
+      html.push(`<li data-sid="${esc(s.id)}" tabindex="0">
+        <div class="survey-pin list" style="--st:var(--st-${k})"></div>
+        <div class="txt"><div class="name">${esc(surveyTitle(s))}</div>
+          <div class="meta"><span class="mono">${esc(fmtDate(s.date))}</span>${s.team ? `<span>${esc(s.team)}</span>` : ""}${s.createdBy ? `<span>נרשם ע"י ${esc(s.createdBy.name)}</span>` : ""}</div></div>
+        <div class="when">${s.netsFound === "yes" ? `<span class="pill nets">רשתות${n ? " · " + n : ""}</span>` : `<span class="pill">${STATUSES[k].short}</span>`}</div>
+      </li>`);
+    }
+    html.push("</ul>");
+    $("#log-list").innerHTML = html.join("");
+  }
+
+  function initTabs() {
+    document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+      document.querySelectorAll("[data-tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+      $("#pane-log").classList.toggle("hidden", b.dataset.tab !== "log");
+      $("#pane-sites").classList.toggle("hidden", b.dataset.tab !== "sites");
+      if (isPhone()) $("#panel").classList.add("open");
+    }));
+    $("#log-search").addEventListener("input", renderLog);
+    $("#log-chips").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-logf]");
+      if (!b) return;
+      logFilter = logFilter === b.dataset.logf ? "" : b.dataset.logf;
+      renderLog();
+    });
+    $("#log-list").addEventListener("click", (e) => {
+      const li = e.target.closest("[data-sid]");
+      if (li) focusSurvey(li.dataset.sid);
+    });
+    $("#log-list").addEventListener("keydown", (e) => {
+      const li = e.target.closest("[data-sid]");
+      if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); focusSurvey(li.dataset.sid); }
+    });
+  }
+
+  function initMenu() {
+    $("#new-survey-btn").addEventListener("click", startNewSurvey);
+    const menu = $("#menu");
+    menu.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-menu]");
+      if (!b) return;
+      menu.open = false;
+      ({ "add-site": startAddSite, "draw-ridge": startDrawRidge, data: openData, team: openTeam, signout: signOut })[b.dataset.menu]();
+    });
+    document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) menu.open = false; });
   }
 
   // Degrees and decimal minutes, as on a boat GPS: 32°06.576′N
@@ -662,7 +1149,9 @@
     $("#site-list").innerHTML = html.join("");
   }
 
-  function renderAll() { renderSidebar(); renderMap(); }
+  function renderAll() {
+    renderSidebar(); renderLog(); renderMap(); renderSurveys(); renderRidges();
+  }
 
   function isPhone() { return window.matchMedia("(max-width: 760px)").matches; }
 
@@ -725,6 +1214,33 @@
       case "move": map.closePopup(); startMoveSite(id); break;
       case "verify": setSiteEdit(id, { verified: true }); map.closePopup(); renderAll(); toast("המיקום סומן כמאומת"); break;
       case "edit-site": map.closePopup(); openSiteForm(getSite(id)); break;
+      case "edit-survey": {
+        map.closePopup();
+        const s = state.surveys.find((x) => x.id === id);
+        if (s) openSurveyForm(clone(s));
+        break;
+      }
+      case "survey-here": {
+        map.closePopup();
+        openSurveyForm(newSurvey(null, L.latLng(+b.dataset.lat, +b.dataset.lng)));
+        break;
+      }
+      case "ridge-hide":
+        map.closePopup();
+        state.ridgeFlags[id] = { hidden: true, at: Date.now(), by: me ? me.email : "" };
+        persist("ridgeFlags", id, state.ridgeFlags[id]);
+        renderRidges(true);
+        toast("הרכס הוסתר לכל הצוות");
+        break;
+      case "ridge-delete":
+        map.closePopup();
+        confirmDialog("למחוק את הרכס שסומן?").then((ok) => {
+          if (!ok) return;
+          state.ridges = state.ridges.filter((r) => r.id !== id);
+          persist("ridges", id, null);
+          renderRidges(true);
+        });
+        break;
     }
   });
 
@@ -786,13 +1302,13 @@
     drawMode.click(e.latlng);
   }
 
-  $("#add-site-btn").addEventListener("click", () => {
-    setDrawMode({ type: "new-site" }, "לחץ על המפה במיקום האתר החדש", {
+  function startAddSite() {
+    setDrawMode({ type: "new-site" }, "לחצו על המפה במיקום אתר הצלילה החדש", {
       noUndo: true,
       click: (ll) => { endDrawMode(); openSiteForm({ lat: +ll.lat.toFixed(6), lng: +ll.lng.toFixed(6) }); },
       done: () => {},
     });
-  });
+  }
 
   // ---------------------------------------------------------------- modal
   function openModal(html) {
@@ -800,7 +1316,10 @@
     $("#modal").classList.remove("hidden");
     $("#modal").scrollTop = 0;
   }
-  function closeModal() { $("#modal").classList.add("hidden"); }
+  function closeModal() {
+    $("#modal").classList.add("hidden");
+    if (modalCleanup) { modalCleanup(); modalCleanup = null; }
+  }
   $("#modal-close").addEventListener("click", () => { closeModal(); draft = null; });
 
   // -------------------------------------------------------- custom site form
@@ -865,9 +1384,17 @@
   }
 
   // -------------------------------------------------------------- survey form
-  function newSurvey(siteId) {
+  function newSurvey(siteId, latlng) {
+    let site = siteId ? getSite(siteId) : null;
+    if (!site && latlng) {
+      const near = nearbySites(latlng.lat, latlng.lng, 0.4)[0];   // auto-link a site within 400 m
+      if (near) site = near.site;
+    }
+    const pos = latlng || (site && L.latLng(site.lat, site.lng));
     return {
-      id: uid("survey"), siteId, isNew: true,
+      id: uid("survey"), siteId: site ? site.id : "", isNew: true,
+      lat: pos ? +pos.lat.toFixed(6) : null, lng: pos ? +pos.lng.toFixed(6) : null,
+      place: latlng || !site ? "" : site.name,
       date: today(), timeStart: "", team: "", status: "done", notDoneReason: "",
       netsFound: "no", findings: [],
       siteDescription: "", bottomType: "", marineLife: "",
@@ -879,10 +1406,23 @@
 
   function openSurveyForm(s) {
     draft = s;
-    const site = getSite(s.siteId);
     const w = s.water, d = s.dive;
-    openModal(`<h2>סקר – ${esc(site.name)}</h2>
+    const loc = surveyLoc(s);
+    const near = loc ? nearbySites(loc[0], loc[1], 2) : [];
+    if (s.siteId && !near.some((x) => x.site.id === s.siteId) && getSite(s.siteId)) near.unshift({ site: getSite(s.siteId), d: 0 });
+    openModal(`<h2>${s.isNew ? "סקר חדש" : "סקר"} – ${esc(surveyTitle(s))}</h2>
+      <p class="sub">${s.createdBy ? `נרשם ע"י ${esc(s.createdBy.name)}` : ""}${s.updatedBy && s.createdBy && s.updatedBy.email !== s.createdBy.email ? ` · עודכן ע"י ${esc(s.updatedBy.name)}` : ""}</p>
       <form id="survey-form">
+        <fieldset><legend>מיקום</legend><div class="grid">
+          <label class="field wide"><span>שם המקום</span><input name="place" value="${esc(s.place || "")}" placeholder="למשל: רכס צפוני מול חוף מכמורת"></label>
+          <label class="field wide"><span>שייך לאתר צלילה</span><select name="siteId">
+            <option value="">— נקודה עצמאית —</option>
+            ${near.map((x) => `<option value="${esc(x.site.id)}"${x.site.id === s.siteId ? " selected" : ""}>${esc(x.site.name)}${x.d ? ` (${x.d < 1000 ? Math.round(x.d) + " מ'" : (x.d / 1000).toFixed(1) + " ק\"מ"})` : ""}</option>`).join("")}
+          </select></label>
+        </div>
+        <div class="loc-row"><span class="mono" dir="ltr">${loc ? ddm(loc[0], "N", "S", 2) + "  " + ddm(loc[1], "E", "W", 3) : "אין מיקום"}</span>
+          <button type="button" class="btn btn-ghost small" id="move-point">הזז את הנקודה במפה</button></div>
+        </fieldset>
         <fieldset><legend>פרטי הסקר</legend><div class="grid">
           <label class="field"><span>תאריך</span><input type="date" name="date" value="${esc(s.date)}" required></label>
           <label class="field"><span>שעת כניסה</span><input type="time" name="timeStart" value="${esc(s.timeStart)}"></label>
@@ -966,6 +1506,15 @@
       if (b.dataset.f === "locate") pickFindingLocation(i);
     });
 
+    $("#move-point").addEventListener("click", () => withMapInteraction(() => {
+      const l = surveyLoc(draft);
+      if (l) map.setView(l, Math.max(map.getZoom(), 15));
+      setDrawMode({ type: "move-point" }, "לחצו על המפה במיקום המדויק של הסקר", {
+        noUndo: true,
+        click: (ll) => { draft.lat = +ll.lat.toFixed(6); draft.lng = +ll.lng.toFixed(6); endDrawMode(); reopenDraft(); },
+        done: reopenDraft, cancel: reopenDraft,
+      });
+    }));
     $("#draw-route").addEventListener("click", startDrawRoute);
     if ($("#gps-route")) $("#gps-route").addEventListener("click", startGpsRoute);
     $("#gpx-file").addEventListener("change", importGpx);
@@ -989,11 +1538,16 @@
       delete rec.isNew;
       if (rec.netsFound !== "yes") rec.findings = [];
       rec.updatedAt = Date.now();
+      if (me) {
+        const who = { name: me.name, email: me.email };
+        if (!rec.createdBy) rec.createdBy = who;
+        rec.updatedBy = who;
+      }
       const i = state.surveys.findIndex((x) => x.id === rec.id);
       if (i >= 0) state.surveys[i] = rec;
       else { rec.createdAt = rec.updatedAt; state.surveys.push(rec); }
       closeModal(); draft = null; renderAll();
-      persist("surveys", rec.id, rec).then((ok) => ok && toast(db ? "הסקר נשמר ושותף עם הצוות" : "הסקר נשמר"));
+      persist("surveys", rec.id, rec).then((ok) => ok && toast(db ? "הסקר נשמר ומשותף עם הצוות" : "הסקר נשמר"));
     });
   }
 
@@ -1024,6 +1578,8 @@
     const form = $("#survey-form");
     if (!form || !draft) return;
     const f = new FormData(form);
+    draft.place = (f.get("place") || "").trim();
+    draft.siteId = f.get("siteId") || "";
     draft.date = f.get("date");
     draft.timeStart = f.get("timeStart");
     draft.status = f.get("status");
@@ -1053,8 +1609,8 @@
     withMapInteraction(() => {
       const pts = draft.route.slice();
       const line = L.polyline(pts, { color: "#ffd400", weight: 4 }).addTo(tempLayer);
-      const site = getSite(draft.siteId);
-      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 16));
+      const here = surveyLoc(draft);
+      if (here) map.setView(here, Math.max(map.getZoom(), 16));
       const msg = () => `לחץ על המפה להוספת נקודות למסלול (${pts.length} נק', ${routeLengthM(pts)} מ')`;
       setDrawMode({ type: "route" }, msg(), {
         click: (ll) => { pts.push([+ll.lat.toFixed(6), +ll.lng.toFixed(6)]); line.setLatLngs(pts); updateDrawMsg(msg()); },
@@ -1105,8 +1661,8 @@
 
   function pickFindingLocation(i) {
     withMapInteraction(() => {
-      const site = getSite(draft.siteId);
-      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 16));
+      const here = surveyLoc(draft);
+      if (here) map.setView(here, Math.max(map.getZoom(), 16));
       if (draft.route.length > 1) L.polyline(draft.route, { color: "#ffd400", weight: 3 }).addTo(tempLayer);
       setDrawMode({ type: "finding" }, "לחץ על המפה במיקום הממצא", {
         noUndo: true,
@@ -1162,12 +1718,16 @@
   }
 
   // ------------------------------------------------------------- data export
-  $("#data-btn").addEventListener("click", () => {
-    openModal(`<h2>ניהול נתונים</h2>
+  function openData() {
+    const backlog = db ? localBacklog() : { surveys: [] };
+    openModal(`<h2>נתונים וגיבוי</h2>
       <p class="hint">${db
         ? "הנתונים משותפים: כל סקר שנשמר מופיע מיד אצל כל מי שפותח את המפה. מומלץ לייצא גיבוי מדי פעם."
         : "הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. כדי לשתף עם הצוות או לגבות – ייצא קובץ גיבוי והעבר אותו (וואטסאפ / דרייב). ייבוא ממזג את הנתונים עם הקיימים."}</p>
-      <p>סה"כ: ${state.surveys.length} סקרים · ${state.customSites.length} אתרים שנוספו · ${Object.keys(state.siteEdits).length} תיקוני מיקום</p>
+      <p>סה"כ: ${state.surveys.length} סקרים · ${state.ridges.length} רכסים שסומנו · ${state.customSites.length} אתרים שנוספו · ${Object.keys(state.siteEdits).length} תיקוני מיקום</p>
+      ${backlog.surveys.length ? `<fieldset><legend>נתונים מהמכשיר</legend>
+        <p class="hint">${backlog.surveys.length} סקרים נשמרו במכשיר הזה לפני שהסנכרון הופעל.</p>
+        <button class="btn btn-primary" id="upload-local">העלה אותם לצוות</button></fieldset>` : ""}
       <fieldset><legend>ייצוא</legend><div class="row">
         <button class="btn" id="exp-json">גיבוי מלא (JSON)</button>
         <button class="btn btn-ghost" id="exp-geojson">GeoJSON (ל-Google My Maps / QGIS)</button>
@@ -1188,7 +1748,12 @@
       state.customSites = []; state.siteEdits = {}; state.surveys = [];
       saveLocal(); closeModal(); renderAll();
     });
-  });
+    if ($("#upload-local")) $("#upload-local").addEventListener("click", () => {
+      for (const s of backlog.surveys) { state.surveys.push(s); persist("surveys", s.id, s); }
+      closeModal(); renderAll();
+      toast(`${backlog.surveys.length} סקרים הועלו לצוות`);
+    });
+  }
 
   function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
 
@@ -1247,6 +1812,14 @@
     }
     for (const s of state.surveys) {
       const siteName = (getSite(s.siteId) || {}).name;
+      const loc = surveyLoc(s);
+      if (loc) {
+        features.push({ type: "Feature",
+          properties: { kind: "survey", place: surveyTitle(s), site: siteName || "", date: s.date, status: SURVEY_STATUS[s.status],
+            nets_found: s.netsFound === "yes", findings: findingsCount(s), removed: removedCount(s), team: s.team,
+            recorded_by: s.createdBy ? s.createdBy.name : "" },
+          geometry: { type: "Point", coordinates: [loc[1], loc[0]] } });
+      }
       if (s.route && s.route.length > 1) {
         features.push({ type: "Feature",
           properties: { kind: "route", site: siteName, date: s.date, team: s.team, length_m: routeLengthM(s.route) },
@@ -1264,12 +1837,13 @@
   }
 
   function exportCsv() {
-    const cols = ["אתר", "אזור", "תאריך", "שעה", "סטטוס", "סיבה", "צוות", "נמצאו רשתות", "ממצאים",
+    const cols = ["מקום", "קו רוחב", "קו אורך", "נרשם ע\"י", "אתר", "אזור", "תאריך", "שעה", "סטטוס", "סיבה", "צוות", "נמצאו רשתות", "ממצאים",
       "תיאור אתר", "קרקעית", "חי ים", "ראות", "טמפ'", "זרם", "כיוון זרם", "מצב ים", "רוח", "הערות מים",
       "כניסה", "עומק מקס'", "משך", "צוללים", "תיאור צלילה", "אורך מסלול (מ')"];
     const rows = state.surveys.map((s) => {
       const site = getSite(s.siteId) || {};
-      return [site.name, REGIONS[site.region], s.date, s.timeStart, SURVEY_STATUS[s.status], s.notDoneReason, s.team,
+      const loc = surveyLoc(s) || ["", ""];
+      return [surveyTitle(s), loc[0], loc[1], s.createdBy ? s.createdBy.name : "", site.name, REGIONS[site.region], s.date, s.timeStart, SURVEY_STATUS[s.status], s.notDoneReason, s.team,
         s.netsFound === "yes" ? "כן" : "לא",
         (s.findings || []).map((f) => `${FINDING_TYPES[f.type]} (${f.amount || "?"}, ${f.size || "?"}, ${REMOVED[f.removed]})`).join("; "),
         s.siteDescription, s.bottomType, s.marineLife, s.water.visibility, s.water.temp, s.water.current, s.water.currentDir,
@@ -1284,7 +1858,10 @@
   // --------------------------------------------------------------------- boot
   initMap();
   initSidebar();
+  initTabs();
+  initMenu();
   setSyncBadge();
+  restoreLayers();
   renderAll();
   initSharedStore();
 })();

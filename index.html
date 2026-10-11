@@ -27,27 +27,60 @@
       </div>
     </div>
     <div class="bar-actions">
-      <button id="add-site-btn" class="btn">
-        <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 2v10M2 7h10"/></svg>
-        <span class="lbl-long">אתר חדש</span><span class="lbl-short">אתר</span>
+      <span id="sync" class="sync local"></span>
+      <button id="new-survey-btn" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 2v10M2 7h10"/></svg>
+        סקר
       </button>
-      <button id="data-btn" class="btn btn-ghost">נתונים</button>
+      <details class="menu" id="menu">
+        <summary class="btn btn-ghost" aria-label="תפריט">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor"><circle cx="4" cy="9" r="1.6"/><circle cx="9" cy="9" r="1.6"/><circle cx="14" cy="9" r="1.6"/></svg>
+        </summary>
+        <div class="menu-pop" role="menu">
+          <div class="menu-user" id="menu-user"></div>
+          <button data-menu="draw-ridge" role="menuitem">סמן רכס תת-ימי</button>
+          <button data-menu="add-site" role="menuitem">הוסף אתר צלילה</button>
+          <button data-menu="data" role="menuitem">ייצוא, ייבוא וגיבוי</button>
+          <button data-menu="team" class="owner-only" role="menuitem">ניהול צוות</button>
+          <button data-menu="signout" class="signed-only" role="menuitem">יציאה</button>
+        </div>
+      </details>
     </div>
   </header>
 
   <div class="layout">
     <aside id="panel" class="panel" aria-label="אתרים">
       <button class="panel-handle" id="panel-handle" aria-label="הרחב או כווץ את הרשימה"><span></span></button>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="log" aria-selected="true">יומן סקרים</button>
+        <button role="tab" data-tab="sites" aria-selected="false">אתרי צלילה</button>
+      </div>
+      <div class="panel-scroll" id="pane-log">
+        <section class="progress" aria-label="סיכום הסקרים">
+          <div class="progress-head">
+            <div class="count"><span class="big" id="log-count">0</span></div>
+            <div class="count-label"><b>צלילות סקר</b><span class="log-sub" id="log-sub"></span></div>
+          </div>
+          <ul class="chips" id="log-chips"></ul>
+        </section>
+        <div class="filters">
+          <div class="search">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+            <input id="log-search" type="search" placeholder="חיפוש לפי מקום, צוות או צולל" aria-label="חיפוש ביומן">
+          </div>
+        </div>
+        <div id="log-list"></div>
+      </div>
+      <div class="panel-scroll hidden" id="pane-sites">
       <section class="progress" aria-label="התקדמות הסקר">
         <div class="progress-head">
           <div class="count"><span class="big" id="done-count">0</span><span class="slash">/</span><span class="total" id="total-count">0</span></div>
-          <div class="count-label"><b>אתרים נסקרו</b><span id="sync" class="sync local"></span></div>
+          <div class="count-label"><b>אתרי צלילה מוכרזים נסקרו</b></div>
         </div>
         <div class="coastbar" id="coastbar" aria-label="כל האתרים לאורך החוף, מצפון לדרום"></div>
         <div class="coastbar-ends" aria-hidden="true"><span>ראש הנקרה</span><span>צפון ← דרום</span><span>זיקים</span></div>
         <ul class="chips" id="status-chips"></ul>
       </section>
-      <div class="panel-scroll">
         <div class="filters">
           <div class="search">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
@@ -101,6 +134,18 @@
     </div>
   </div>
 
+  <div id="gate" class="gate hidden" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+    <div class="gate-card">
+      <svg class="gate-mark" width="56" height="56" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
+        <circle cx="15" cy="15" r="12.5"/><path d="M2.5 15h25M15 2.5v25" stroke-dasharray="2 2.5"/>
+        <path d="M6 19c2.2-1.6 4.4-1.6 6.6 0s4.4 1.6 6.6 0 4.4-1.6 4.8-.8" stroke-width="2"/>
+      </svg>
+      <h2 id="gate-title"></h2>
+      <p id="gate-text"></p>
+      <div class="gate-actions" id="gate-actions"></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -109,6 +154,8 @@
   <script src="data/coast.js"></script>
   <script src="data/bathy.js"></script>
   <script src="data/places.js"></script>
+  <script src="data/ridges.js"></script>
+  <script src="data/firebase-config.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

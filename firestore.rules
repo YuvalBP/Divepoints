@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Access model
+// - Everyone signs in with Google.
+// - meta/owner: the map's manager. The first person to sign in after setup
+//   claims it (create-once); nobody can change it from the app afterwards.
+// - team/{email}: members, added and removed only by the manager.
+// - Survey data (surveys, sites, edits, ridges, ridgeFlags): read and write
+//   for the manager and members; nobody else sees anything.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function email() {
+      return request.auth.token.email.lower();
+    }
+    function isOwner() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/meta/owner)
+        && get(/databases/$(database)/documents/meta/owner).data.email == email();
+    }
+    function isMember() {
+      return signedIn()
+        && (isOwner() || exists(/databases/$(database)/documents/team/$(email())));
+    }
+
+    match /meta/owner {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.email == email();
+      allow update, delete: if false;
+    }
+
+    match /team/{member} {
+      // A member may read their own entry (that is how the app checks access).
+      allow read: if isOwner() || (signedIn() && member == email());
+      allow write: if isOwner() && member == member.lower();
+    }
+
+    match /{coll}/{id} {
+      allow read, write: if isMember()
+        && coll in ['surveys', 'sites', 'edits', 'ridges', 'ridgeFlags'];
+    }
+  }
+}

@@ -49,3 +49,34 @@
 
 כלי הבנייה נמצאים ב-`tools/`: `build_coast.py`, `build_bathy.py`, `build_places.py`, `build_artifact.py`.
 העומקים מהמודל הם הערכה בלבד ואינם לניווט.
+
+
+## סנכרון צוות (Firebase)
+כשמוגדר Firebase, האתר הופך לכלי צוות: כל נקודת סקר, רכס או תיקון שמישהו שומר מופיעים מיד אצל כולם.
+העבודה בים נשמרת בטלפון גם בלי קליטה ונשלחת כשהקליטה חוזרת. הגישה רק לחברי צוות שנכנסים עם חשבון Google.
+
+### הקמה חד-פעמית (כ-10 דקות, אפשר מהטלפון בדפדפן)
+1. **console.firebase.google.com** ← *Create a project* ← שם: `divepoints` ← אפשר לכבות Google Analytics ← *Create*.
+2. **Build ← Authentication ← Get started ← Sign-in method ← Google ← Enable** ← בוחרים מייל תמיכה ← *Save*.
+   באותו מסך: **Settings ← Authorized domains ← Add domain** ← `yuvalbp.github.io`.
+3. **Build ← Firestore Database ← Create database** ← מיקום `eur3 (europe-west)` ← *Start in production mode* ← *Create*.
+   בלשונית **Rules** מוחקים הכל, מדביקים את התוכן של `firestore.rules` מה-repo ← *Publish*.
+4. **Project settings (גלגל שיניים) ← Your apps ← הסמל `</>`** ← שם `divepoints` ← *Register app*.
+   מעתיקים את האובייקט `firebaseConfig` ומדביקים ב-`data/firebase-config.js` במקום `null`.
+5. נכנסים לאתר. **הראשון שנכנס הופך למנהל המפה**, ומוסיף את חברי הצוות בתפריט ← *ניהול צוות*.
+
+### הרשאות (`firestore.rules`)
+- רק מנהל המפה מוסיף ומסיר חברי צוות. את זהות המנהל אי אפשר לשנות מהאפליקציה.
+- חברי צוות קוראים וכותבים סקרים, רכסים ואתרים. מי שלא ברשימה לא רואה כלום.
+- כל סקר שומר מי רשם אותו ומי עדכן אותו אחרון.
+
+### בדיקה מקומית
+`firebase emulators:start --only firestore,auth --project demo-divepoints` (עם `firebase.json` שב-repo),
+ו-`emulatorHost: "127.0.0.1"` בהגדרות. כך נבדקו הכללים: זר נחסם, חבר צוות לא יכול לשנות את הצוות או לתפוס ניהול.
+
+## שכבות במפה
+- **נקודות סקר** (מעוינים בצבע התוצאה) – הישות המרכזית. לוחצים *+ סקר* ובוחרים נקודה בכל מקום.
+  שיוך לאתר צלילה הוא אופציונלי (מוצע אוטומטית אם יש אתר במרחק עד 400 מ').
+- **רכסים תת-ימיים** – זיהוי אוטומטי מתצלום Sentinel-2 (`tools/build_ridges.py`: אזורים כהים מהחול סביבם
+  ברצועת 1–20 מ'), מקווקו. הצוות מסמן רכסים ידנית (קו רציף) ומסתיר זיהויים שגויים – לכולם.
+- **אתרי צלילה מוכרזים**, **מסלולים וממצאים**, **קווי עומק** – כל שכבה ניתנת להסתרה.
