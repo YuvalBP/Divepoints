@@ -431,3 +431,6 @@ legend { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); letter-
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Street map mode (hosted version): the tiles carry their own labels */
+.mode-streets .map-label.place { display: none !important; }

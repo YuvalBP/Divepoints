@@ -301,6 +301,14 @@
     const surveyLine = L.geoJSON(fc((f) => f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT),
       { pane: "surveyLine", interactive: false, style: surveyStyle });
     chartLayers = { bands, land, isobaths, surveyLine, satellite };
+    // Hosted outside Claude (e.g. GitHub Pages) live tile services load:
+    // sharper imagery over the bundled tiles, and a street map.
+    chartLayers.live = IN_CLAUDE ? null : {
+      sat: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }),
+      streets: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { maxZoom: 19, attribution: "© OpenStreetMap contributors" }),
+    };
 
     // Labels: depth figures along isobaths + coastal place names. Which
     // ones show is decided in CSS from the zoom classes on the container.
@@ -365,10 +373,22 @@
 
   function setMapMode(mode) {
     mapMode = mode;
-    const sat = chartLayers.satellite;
-    if (mode === "sat" && !map.hasLayer(sat)) sat.addTo(map);
-    if (mode !== "sat" && map.hasLayer(sat)) map.removeLayer(sat);
+    const live = chartLayers.live || {};
+    const want = {
+      bundled: mode === "sat" || mode === "streets",  // also a fallback under the street map
+      liveSat: mode === "sat" && live.sat,
+      streets: mode === "streets" && live.streets,
+    };
+    const toggle = (layer, on) => {
+      if (!layer) return;
+      if (on && !map.hasLayer(layer)) layer.addTo(map);
+      if (!on && map.hasLayer(layer)) map.removeLayer(layer);
+    };
+    toggle(chartLayers.satellite, want.bundled);
+    toggle(live.sat, want.liveSat);
+    toggle(live.streets, want.streets);
     map.getContainer().classList.toggle("mode-sat", mode === "sat");
+    map.getContainer().classList.toggle("mode-streets", mode === "streets");
     document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
     restyleChart();
   }
@@ -389,6 +409,7 @@
           <div class="seg" role="group" aria-label="סוג מפה">
             <button type="button" data-mode="sat" aria-pressed="true">לוויין</button>
             <button type="button" data-mode="chart" aria-pressed="false">מפה ימית</button>
+            ${IN_CLAUDE ? "" : `<button type="button" data-mode="streets" aria-pressed="false">רחובות</button>`}
           </div>
           <button type="button" class="tool" id="toggle-iso" aria-pressed="true" title="קווי עומק">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 5c3-2 5 2 8 0s4-1 6 0M2 9c3-2 5 2 8 0s4-1 6 0M2 13c3-2 5 2 8 0s4-1 6 0"/></svg>
