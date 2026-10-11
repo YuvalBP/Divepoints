@@ -1,0 +1,2161 @@
+<title>סקר רשתות רפאים</title>
+<style>
+/* required styles */
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	}
+.leaflet-container {
+	overflow: hidden;
+	}
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	-webkit-user-select: none;
+	   -moz-user-select: none;
+	        user-select: none;
+	  -webkit-user-drag: none;
+	}
+/* Prevents IE11 from highlighting tiles in blue */
+.leaflet-tile::selection {
+	background: transparent;
+}
+/* Safari renders non-retina tile on retina better with this, but Chrome is worse */
+.leaflet-safari .leaflet-tile {
+	image-rendering: -webkit-optimize-contrast;
+	}
+/* hack that prevents hw layers "stretching" when loading new tiles */
+.leaflet-safari .leaflet-tile-container {
+	width: 1600px;
+	height: 1600px;
+	-webkit-transform-origin: 0 0;
+	}
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+	display: block;
+	}
+/* .leaflet-container svg: reset svg max-width decleration shipped in Joomla! (joomla.org) 3.x */
+/* .leaflet-container img: map is broken in FF if you have max-width: 100% on tiles */
+.leaflet-container .leaflet-overlay-pane svg {
+	max-width: none !important;
+	max-height: none !important;
+	}
+.leaflet-container .leaflet-marker-pane img,
+.leaflet-container .leaflet-shadow-pane img,
+.leaflet-container .leaflet-tile-pane img,
+.leaflet-container img.leaflet-image-layer,
+.leaflet-container .leaflet-tile {
+	max-width: none !important;
+	max-height: none !important;
+	width: auto;
+	padding: 0;
+	}
+
+.leaflet-container img.leaflet-tile {
+	/* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
+	mix-blend-mode: plus-lighter;
+}
+
+.leaflet-container.leaflet-touch-zoom {
+	-ms-touch-action: pan-x pan-y;
+	touch-action: pan-x pan-y;
+	}
+.leaflet-container.leaflet-touch-drag {
+	-ms-touch-action: pinch-zoom;
+	/* Fallback for FF which doesn't support pinch-zoom */
+	touch-action: none;
+	touch-action: pinch-zoom;
+}
+.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+	-ms-touch-action: none;
+	touch-action: none;
+}
+.leaflet-container {
+	-webkit-tap-highlight-color: transparent;
+}
+.leaflet-container a {
+	-webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+}
+.leaflet-tile {
+	filter: inherit;
+	visibility: hidden;
+	}
+.leaflet-tile-loaded {
+	visibility: inherit;
+	}
+.leaflet-zoom-box {
+	width: 0;
+	height: 0;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	z-index: 800;
+	}
+/* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
+.leaflet-overlay-pane svg {
+	-moz-user-select: none;
+	}
+
+.leaflet-pane         { z-index: 400; }
+
+.leaflet-tile-pane    { z-index: 200; }
+.leaflet-overlay-pane { z-index: 400; }
+.leaflet-shadow-pane  { z-index: 500; }
+.leaflet-marker-pane  { z-index: 600; }
+.leaflet-tooltip-pane   { z-index: 650; }
+.leaflet-popup-pane   { z-index: 700; }
+
+.leaflet-map-pane canvas { z-index: 100; }
+.leaflet-map-pane svg    { z-index: 200; }
+
+.leaflet-vml-shape {
+	width: 1px;
+	height: 1px;
+	}
+.lvml {
+	behavior: url(#default#VML);
+	display: inline-block;
+	position: absolute;
+	}
+
+
+/* control positioning */
+
+.leaflet-control {
+	position: relative;
+	z-index: 800;
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+.leaflet-top,
+.leaflet-bottom {
+	position: absolute;
+	z-index: 1000;
+	pointer-events: none;
+	}
+.leaflet-top {
+	top: 0;
+	}
+.leaflet-right {
+	right: 0;
+	}
+.leaflet-bottom {
+	bottom: 0;
+	}
+.leaflet-left {
+	left: 0;
+	}
+.leaflet-control {
+	float: left;
+	clear: both;
+	}
+.leaflet-right .leaflet-control {
+	float: right;
+	}
+.leaflet-top .leaflet-control {
+	margin-top: 10px;
+	}
+.leaflet-bottom .leaflet-control {
+	margin-bottom: 10px;
+	}
+.leaflet-left .leaflet-control {
+	margin-left: 10px;
+	}
+.leaflet-right .leaflet-control {
+	margin-right: 10px;
+	}
+
+
+/* zoom and fade animations */
+
+.leaflet-fade-anim .leaflet-popup {
+	opacity: 0;
+	-webkit-transition: opacity 0.2s linear;
+	   -moz-transition: opacity 0.2s linear;
+	        transition: opacity 0.2s linear;
+	}
+.leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+	opacity: 1;
+	}
+.leaflet-zoom-animated {
+	-webkit-transform-origin: 0 0;
+	    -ms-transform-origin: 0 0;
+	        transform-origin: 0 0;
+	}
+svg.leaflet-zoom-animated {
+	will-change: transform;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+	-webkit-transition: -webkit-transform 0.25s cubic-bezier(0,0,0.25,1);
+	   -moz-transition:    -moz-transform 0.25s cubic-bezier(0,0,0.25,1);
+	        transition:         transform 0.25s cubic-bezier(0,0,0.25,1);
+	}
+.leaflet-zoom-anim .leaflet-tile,
+.leaflet-pan-anim .leaflet-tile {
+	-webkit-transition: none;
+	   -moz-transition: none;
+	        transition: none;
+	}
+
+.leaflet-zoom-anim .leaflet-zoom-hide {
+	visibility: hidden;
+	}
+
+
+/* cursors */
+
+.leaflet-interactive {
+	cursor: pointer;
+	}
+.leaflet-grab {
+	cursor: -webkit-grab;
+	cursor:    -moz-grab;
+	cursor:         grab;
+	}
+.leaflet-crosshair,
+.leaflet-crosshair .leaflet-interactive {
+	cursor: crosshair;
+	}
+.leaflet-popup-pane,
+.leaflet-control {
+	cursor: auto;
+	}
+.leaflet-dragging .leaflet-grab,
+.leaflet-dragging .leaflet-grab .leaflet-interactive,
+.leaflet-dragging .leaflet-marker-draggable {
+	cursor: move;
+	cursor: -webkit-grabbing;
+	cursor:    -moz-grabbing;
+	cursor:         grabbing;
+	}
+
+/* marker & overlays interactivity */
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-image-layer,
+.leaflet-pane > svg path,
+.leaflet-tile-container {
+	pointer-events: none;
+	}
+
+.leaflet-marker-icon.leaflet-interactive,
+.leaflet-image-layer.leaflet-interactive,
+.leaflet-pane > svg path.leaflet-interactive,
+svg.leaflet-image-layer.leaflet-interactive path {
+	pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+	pointer-events: auto;
+	}
+
+/* visual tweaks */
+
+.leaflet-container {
+	background: #ddd;
+	outline-offset: 1px;
+	}
+.leaflet-container a {
+	color: #0078A8;
+	}
+.leaflet-zoom-box {
+	border: 2px dotted #38f;
+	background: rgba(255,255,255,0.5);
+	}
+
+
+/* general typography */
+.leaflet-container {
+	font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	}
+
+
+/* general toolbar styles */
+
+.leaflet-bar {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+	border-radius: 4px;
+	}
+.leaflet-bar a {
+	background-color: #fff;
+	border-bottom: 1px solid #ccc;
+	width: 26px;
+	height: 26px;
+	line-height: 26px;
+	display: block;
+	text-align: center;
+	text-decoration: none;
+	color: black;
+	}
+.leaflet-bar a,
+.leaflet-control-layers-toggle {
+	background-position: 50% 50%;
+	background-repeat: no-repeat;
+	display: block;
+	}
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+	background-color: #f4f4f4;
+	}
+.leaflet-bar a:first-child {
+	border-top-left-radius: 4px;
+	border-top-right-radius: 4px;
+	}
+.leaflet-bar a:last-child {
+	border-bottom-left-radius: 4px;
+	border-bottom-right-radius: 4px;
+	border-bottom: none;
+	}
+.leaflet-bar a.leaflet-disabled {
+	cursor: default;
+	background-color: #f4f4f4;
+	color: #bbb;
+	}
+
+.leaflet-touch .leaflet-bar a {
+	width: 30px;
+	height: 30px;
+	line-height: 30px;
+	}
+.leaflet-touch .leaflet-bar a:first-child {
+	border-top-left-radius: 2px;
+	border-top-right-radius: 2px;
+	}
+.leaflet-touch .leaflet-bar a:last-child {
+	border-bottom-left-radius: 2px;
+	border-bottom-right-radius: 2px;
+	}
+
+/* zoom control */
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+	font: bold 18px 'Lucida Console', Monaco, monospace;
+	text-indent: 1px;
+	}
+
+.leaflet-touch .leaflet-control-zoom-in, .leaflet-touch .leaflet-control-zoom-out  {
+	font-size: 22px;
+	}
+
+
+/* layers control */
+
+.leaflet-control-layers {
+	box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+	background: #fff;
+	border-radius: 5px;
+	}
+.leaflet-control-layers-toggle {
+	background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAAaCAQAAAADQ4RFAAACf0lEQVR4AY1UM3gkARTePdvdoTxXKc+qTl3aU5U6b2Kbkz3Gtq3Zw6ziLGNPzrYx7946Tr6/ee/XeCQ4D3ykPtL5tHno4n0d/h3+xfuWHGLX81cn7r0iTNzjr7LrlxCqPtkbTQEHeqOrTy4Yyt3VCi/IOB0v7rVC7q45Q3Gr5K6jt+3Gl5nCoDD4MtO+j96Wu8atmhGqcNGHObuf8OM/x3AMx38+4Z2sPqzCxRFK2aF2e5Jol56XTLyggAMTL56XOMoS1W4pOyjUcGGQdZxU6qRh7B9Zp+PfpOFlqt0zyDZckPi1ttmIp03jX8gyJ8a/PG2yutpS/Vol7peZIbZcKBAEEheEIAgFbDkz5H6Zrkm2hVWGiXKiF4Ycw0RWKdtC16Q7qe3X4iOMxruonzegJzWaXFrU9utOSsLUmrc0YjeWYjCW4PDMADElpJSSQ0vQvA1Tm6/JlKnqFs1EGyZiFCqnRZTEJJJiKRYzVYzJck2Rm6P4iH+cmSY0YzimYa8l0EtTODFWhcMIMVqdsI2uiTvKmTisIDHJ3od5GILVhBCarCfVRmo4uTjkhrhzkiBV7SsaqS+TzrzM1qpGGUFt28pIySQHR6h7F6KSwGWm97ay+Z+ZqMcEjEWebE7wxCSQwpkhJqoZA5ivCdZDjJepuJ9IQjGGUmuXJdBFUygxVqVsxFsLMbDe8ZbDYVCGKxs+W080max1hFCarCfV+C1KATwcnvE9gRRuMP2prdbWGowm1KB1y+zwMMENkM755cJ2yPDtqhTI6ED1M/82yIDtC/4j4BijjeObflpO9I9MwXTCsSX8jWAFeHr05WoLTJ5G8IQVS/7vwR6ohirYM7f6HzYpogfS3R2OAAAAAElFTkSuQmCC");
+	width: 36px;
+	height: 36px;
+	}
+.leaflet-retina .leaflet-control-layers-toggle {
+	background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADQAAAA0CAQAAABvcdNgAAAEsklEQVR4AWL4TydIhpZK1kpWOlg0w3ZXP6D2soBtG42jeI6ZmQTHzAxiTbSJsYLjO9HhP+WOmcuhciVnmHVQcJnp7DFvScowZorad/+V/fVzMdMT2g9Cv9guXGv/7pYOrXh2U+RRR3dSd9JRx6bIFc/ekqHI29JC6pJ5ZEh1yWkhkbcFeSjxgx3L2m1cb1C7bceyxA+CNjT/Ifff+/kDk2u/w/33/IeCMOSaWZ4glosqT3DNnNZQ7Cs58/3Ce5HL78iZH/vKVIaYlqzfdLu8Vi7dnvUbEza5Idt36tquZFldl6N5Z/POLof0XLK61mZCmJSWjVF9tEjUluu74IUXvgttuVIHE7YxSkaYhJZam7yiM9Pv82JYfl9nptxZaxMJE4YSPty+vF0+Y2up9d3wwijfjZbabqm/3bZ9ecKHsiGmRflnn1MW4pjHf9oLufyn2z3y1D6n8g8TZhxyzipLNPnAUpsOiuWimg52psrTZYnOWYNDTMuWBWa0tJb4rgq1UvmutpaYEbZlwU3CLJm/ayYjHW5/h7xWLn9Hh1vepDkyf7dE7MtT5LR4e7yYpHrkhOUpEfssBLq2pPhAqoSWKUkk7EDqkmK6RrCEzqDjhNDWNE+XSMvkJRDWlZTmCW0l0PHQGRZY5t1L83kT0Y3l2SItk5JAWHl2dCOBm+fPu3fo5/3v61RMCO9Jx2EEYYhb0rmNQMX/vm7gqOEJLcXTGw3CAuRNeyaPWwjR8PRqKQ1PDA/dpv+on9Shox52WFnx0KY8onHayrJzm87i5h9xGw/tfkev0jGsQizqezUKjk12hBMKJ4kbCqGPVNXudyyrShovGw5CgxsRICxF6aRmSjlBnHRzg7Gx8fKqEubI2rahQYdR1YgDIRQO7JvQyD52hoIQx0mxa0ODtW2Iozn1le2iIRdzwWewedyZzewidueOGqlsn1MvcnQpuVwLGG3/IR1hIKxCjelIDZ8ldqWz25jWAsnldEnK0Zxro19TGVb2ffIZEsIO89EIEDvKMPrzmBOQcKQ+rroye6NgRRxqR4U8EAkz0CL6uSGOm6KQCdWjvjRiSP1BPalCRS5iQYiEIvxuBMJEWgzSoHADcVMuN7IuqqTeyUPq22qFimFtxDyBBJEwNyt6TM88blFHao/6tWWhuuOM4SAK4EI4QmFHA+SEyWlp4EQoJ13cYGzMu7yszEIBOm2rVmHUNqwAIQabISNMRstmdhNWcFLsSm+0tjJH1MdRxO5Nx0WDMhCtgD6OKgZeljJqJKc9po8juskR9XN0Y1lZ3mWjLR9JCO1jRDMd0fpYC2VnvjBSEFg7wBENc0R9HFlb0xvF1+TBEpF68d+DHR6IOWVv2BECtxo46hOFUBd/APU57WIoEwJhIi2CdpyZX0m93BZicktMj1AS9dClteUFAUNUIEygRZCtik5zSxI9MubTBH1GOiHsiLJ3OCoSZkILa9PxiN0EbvhsAo8tdAf9Seepd36lGWHmtNANTv5Jd0z4QYyeo/UEJqxKRpg5LZx6btLPsOaEmdMyxYdlc8LMaJnikDlhclqmPiQnTEpLUIZEwkRagjYkEibQErwhkTAKCLQEbUgkzJQWc/0PstHHcfEdQ+UAAAAASUVORK5CYII=");
+	background-size: 26px 26px;
+	}
+.leaflet-touch .leaflet-control-layers-toggle {
+	width: 44px;
+	height: 44px;
+	}
+.leaflet-control-layers .leaflet-control-layers-list,
+.leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+	display: none;
+	}
+.leaflet-control-layers-expanded .leaflet-control-layers-list {
+	display: block;
+	position: relative;
+	}
+.leaflet-control-layers-expanded {
+	padding: 6px 10px 6px 6px;
+	color: #333;
+	background: #fff;
+	}
+.leaflet-control-layers-scrollbar {
+	overflow-y: scroll;
+	overflow-x: hidden;
+	padding-right: 5px;
+	}
+.leaflet-control-layers-selector {
+	margin-top: 2px;
+	position: relative;
+	top: 1px;
+	}
+.leaflet-control-layers label {
+	display: block;
+	font-size: 13px;
+	font-size: 1.08333em;
+	}
+.leaflet-control-layers-separator {
+	height: 0;
+	border-top: 1px solid #ddd;
+	margin: 5px -10px 5px -6px;
+	}
+
+/* Default icon URLs */
+.leaflet-default-icon-path { /* used only in path-guessing heuristic, see L.Icon.Default */
+	background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABkAAAApCAYAAADAk4LOAAAFgUlEQVR4Aa1XA5BjWRTN2oW17d3YaZtr2962HUzbDNpjszW24mRt28p47v7zq/bXZtrp/lWnXr337j3nPCe85NcypgSFdugCpW5YoDAMRaIMqRi6aKq5E3YqDQO3qAwjVWrD8Ncq/RBpykd8oZUb/kaJutow8r1aP9II0WmLKLIsJyv1w/kqw9Ch2MYdB++12Onxee/QMwvf4/Dk/Lfp/i4nxTXtOoQ4pW5Aj7wpici1A9erdAN2OH64x8OSP9j3Ft3b7aWkTg/Fm91siTra0f9on5sQr9INejH6CUUUpavjFNq1B+Oadhxmnfa8RfEmN8VNAsQhPqF55xHkMzz3jSmChWU6f7/XZKNH+9+hBLOHYozuKQPxyMPUKkrX/K0uWnfFaJGS1QPRtZsOPtr3NsW0uyh6NNCOkU3Yz+bXbT3I8G3xE5EXLXtCXbbqwCO9zPQYPRTZ5vIDXD7U+w7rFDEoUUf7ibHIR4y6bLVPXrz8JVZEql13trxwue/uDivd3fkWRbS6/IA2bID4uk0UpF1N8qLlbBlXs4Ee7HLTfV1j54APvODnSfOWBqtKVvjgLKzF5YdEk5ewRkGlK0i33Eofffc7HT56jD7/6U+qH3Cx7SBLNntH5YIPvODnyfIXZYRVDPqgHtLs5ABHD3YzLuespb7t79FY34DjMwrVrcTuwlT55YMPvOBnRrJ4VXTdNnYug5ucHLBjEpt30701A3Ts+HEa73u6dT3FNWwflY86eMHPk+Yu+i6pzUpRrW7SNDg5JHR4KapmM5Wv2E8Tfcb1HoqqHMHU+uWDD7zg54mz5/2BSnizi9T1Dg4QQXLToGNCkb6tb1NU+QAlGr1++eADrzhn/u8Q2YZhQVlZ5+CAOtqfbhmaUCS1ezNFVm2imDbPmPng5wmz+gwh+oHDce0eUtQ6OGDIyR0uUhUsoO3vfDmmgOezH0mZN59x7MBi++WDL1g/eEiU3avlidO671bkLfwbw5XV2P8Pzo0ydy4t2/0eu33xYSOMOD8hTf4CrBtGMSoXfPLchX+J0ruSePw3LZeK0juPJbYzrhkH0io7B3k164hiGvawhOKMLkrQLyVpZg8rHFW7E2uHOL888IBPlNZ1FPzstSJM694fWr6RwpvcJK60+0HCILTBzZLFNdtAzJaohze60T8qBzyh5ZuOg5e7uwQppofEmf2++DYvmySqGBuKaicF1blQjhuHdvCIMvp8whTTfZzI7RldpwtSzL+F1+wkdZ2TBOW2gIF88PBTzD/gpeREAMEbxnJcaJHNHrpzji0gQCS6hdkEeYt9DF/2qPcEC8RM28Hwmr3sdNyht00byAut2k3gufWNtgtOEOFGUwcXWNDbdNbpgBGxEvKkOQsxivJx33iow0Vw5S6SVTrpVq11ysA2Rp7gTfPfktc6zhtXBBC+adRLshf6sG2RfHPZ5EAc4sVZ83yCN00Fk/4kggu40ZTvIEm5g24qtU4KjBrx/BTTH8ifVASAG7gKrnWxJDcU7x8X6Ecczhm3o6YicvsLXWfh3Ch1W0k8x0nXF+0fFxgt4phz8QvypiwCCFKMqXCnqXExjq10beH+UUA7+nG6mdG/Pu0f3LgFcGrl2s0kNNjpmoJ9o4B29CMO8dMT4Q5ox8uitF6fqsrJOr8qnwNbRzv6hSnG5wP+64C7h9lp30hKNtKdWjtdkbuPA19nJ7Tz3zR/ibgARbhb4AlhavcBebmTHcFl2fvYEnW0ox9xMxKBS8btJ+KiEbq9zA4RthQXDhPa0T9TEe69gWupwc6uBUphquXgf+/FrIjweHQS4/pduMe5ERUMHUd9xv8ZR98CxkS4F2n3EUrUZ10EYNw7BWm9x1GiPssi3GgiGRDKWRYZfXlON+dfNbM+GgIwYdwAAAAASUVORK5CYII=");
+	}
+
+
+/* attribution and scale controls */
+
+.leaflet-container .leaflet-control-attribution {
+	background: #fff;
+	background: rgba(255, 255, 255, 0.8);
+	margin: 0;
+	}
+.leaflet-control-attribution,
+.leaflet-control-scale-line {
+	padding: 0 5px;
+	color: #333;
+	line-height: 1.4;
+	}
+.leaflet-control-attribution a {
+	text-decoration: none;
+	}
+.leaflet-control-attribution a:hover,
+.leaflet-control-attribution a:focus {
+	text-decoration: underline;
+	}
+.leaflet-attribution-flag {
+	display: inline !important;
+	vertical-align: baseline !important;
+	width: 1em;
+	height: 0.6669em;
+	}
+.leaflet-left .leaflet-control-scale {
+	margin-left: 5px;
+	}
+.leaflet-bottom .leaflet-control-scale {
+	margin-bottom: 5px;
+	}
+.leaflet-control-scale-line {
+	border: 2px solid #777;
+	border-top: none;
+	line-height: 1.1;
+	padding: 2px 5px 1px;
+	white-space: nowrap;
+	-moz-box-sizing: border-box;
+	     box-sizing: border-box;
+	background: rgba(255, 255, 255, 0.8);
+	text-shadow: 1px 1px #fff;
+	}
+.leaflet-control-scale-line:not(:first-child) {
+	border-top: 2px solid #777;
+	border-bottom: none;
+	margin-top: -2px;
+	}
+.leaflet-control-scale-line:not(:first-child):not(:last-child) {
+	border-bottom: 2px solid #777;
+	}
+
+.leaflet-touch .leaflet-control-attribution,
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	box-shadow: none;
+	}
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+	border: 2px solid rgba(0,0,0,0.2);
+	background-clip: padding-box;
+	}
+
+
+/* popup */
+
+.leaflet-popup {
+	position: absolute;
+	text-align: center;
+	margin-bottom: 20px;
+	}
+.leaflet-popup-content-wrapper {
+	padding: 1px;
+	text-align: left;
+	border-radius: 12px;
+	}
+.leaflet-popup-content {
+	margin: 13px 24px 13px 20px;
+	line-height: 1.3;
+	font-size: 13px;
+	font-size: 1.08333em;
+	min-height: 1px;
+	}
+.leaflet-popup-content p {
+	margin: 17px 0;
+	margin: 1.3em 0;
+	}
+.leaflet-popup-tip-container {
+	width: 40px;
+	height: 20px;
+	position: absolute;
+	left: 50%;
+	margin-top: -1px;
+	margin-left: -20px;
+	overflow: hidden;
+	pointer-events: none;
+	}
+.leaflet-popup-tip {
+	width: 17px;
+	height: 17px;
+	padding: 1px;
+
+	margin: -10px auto 0;
+	pointer-events: auto;
+
+	-webkit-transform: rotate(45deg);
+	   -moz-transform: rotate(45deg);
+	    -ms-transform: rotate(45deg);
+	        transform: rotate(45deg);
+	}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+	background: white;
+	color: #333;
+	box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+	}
+.leaflet-container a.leaflet-popup-close-button {
+	position: absolute;
+	top: 0;
+	right: 0;
+	border: none;
+	text-align: center;
+	width: 24px;
+	height: 24px;
+	font: 16px/24px Tahoma, Verdana, sans-serif;
+	color: #757575;
+	text-decoration: none;
+	background: transparent;
+	}
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus {
+	color: #585858;
+	}
+.leaflet-popup-scrolled {
+	overflow: auto;
+	}
+
+.leaflet-oldie .leaflet-popup-content-wrapper {
+	-ms-zoom: 1;
+	}
+.leaflet-oldie .leaflet-popup-tip {
+	width: 24px;
+	margin: 0 auto;
+
+	-ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";
+	filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);
+	}
+
+.leaflet-oldie .leaflet-control-zoom,
+.leaflet-oldie .leaflet-control-layers,
+.leaflet-oldie .leaflet-popup-content-wrapper,
+.leaflet-oldie .leaflet-popup-tip {
+	border: 1px solid #999;
+	}
+
+
+/* div icon */
+
+.leaflet-div-icon {
+	background: #fff;
+	border: 1px solid #666;
+	}
+
+
+/* Tooltip */
+/* Base styles for the element that has a tooltip */
+.leaflet-tooltip {
+	position: absolute;
+	padding: 6px;
+	background-color: #fff;
+	border: 1px solid #fff;
+	border-radius: 3px;
+	color: #222;
+	white-space: nowrap;
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+	pointer-events: none;
+	box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+	}
+.leaflet-tooltip.leaflet-interactive {
+	cursor: pointer;
+	pointer-events: auto;
+	}
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	position: absolute;
+	pointer-events: none;
+	border: 6px solid transparent;
+	background: transparent;
+	content: "";
+	}
+
+/* Directions */
+
+.leaflet-tooltip-bottom {
+	margin-top: 6px;
+}
+.leaflet-tooltip-top {
+	margin-top: -6px;
+}
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-top:before {
+	left: 50%;
+	margin-left: -6px;
+	}
+.leaflet-tooltip-top:before {
+	bottom: 0;
+	margin-bottom: -12px;
+	border-top-color: #fff;
+	}
+.leaflet-tooltip-bottom:before {
+	top: 0;
+	margin-top: -12px;
+	margin-left: -6px;
+	border-bottom-color: #fff;
+	}
+.leaflet-tooltip-left {
+	margin-left: -6px;
+}
+.leaflet-tooltip-right {
+	margin-left: 6px;
+}
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before {
+	top: 50%;
+	margin-top: -6px;
+	}
+.leaflet-tooltip-left:before {
+	right: 0;
+	margin-right: -12px;
+	border-left-color: #fff;
+	}
+.leaflet-tooltip-right:before {
+	left: 0;
+	margin-left: -12px;
+	border-right-color: #fff;
+	}
+
+/* Printing */
+
+@media print {
+	/* Prevent printers from removing background-images of controls. */
+	.leaflet-control {
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+		}
+	}
+
+:root {
+  --bg: #f4f7fa;
+  --panel: #ffffff;
+  --text: #17222e;
+  --muted: #5d6b7a;
+  --border: #d9e1e8;
+  --accent: #0b6e99;
+  --accent-text: #ffffff;
+
+  --st-unsurveyed: #8a96a3;
+  --st-clean: #2e9d5b;
+  --st-nets: #d23a3a;
+  --st-partial: #e88b1a;
+  --st-aborted: #7a5cc4;
+
+  --field: #ffffff;
+  --sea: #b7d3e0;
+  --overlay: rgba(10, 20, 30, .45);
+  --toast-bg: #17222e;
+  --toast-fg: #ffffff;
+  --warn: #9a5b00;
+  --danger: #c53030;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1820; --panel: #17232e; --text: #e3ebf2; --muted: #93a3b3; --border: #2c3b49;
+    --accent: #3a9cc9; --field: #0f1820; --sea: #1d3a4a; --overlay: rgba(0, 0, 0, .6);
+    --toast-bg: #e3ebf2; --toast-fg: #0f1820; --warn: #f0b45a; --danger: #e05a5a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1820; --panel: #17232e; --text: #e3ebf2; --muted: #93a3b3; --border: #2c3b49;
+  --accent: #3a9cc9; --field: #0f1820; --sea: #1d3a4a; --overlay: rgba(0, 0, 0, .6);
+  --toast-bg: #e3ebf2; --toast-fg: #0f1820; --warn: #f0b45a; --danger: #e05a5a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px;
+  background: var(--accent); color: var(--accent-text);
+}
+.topbar h1 { font-size: 18px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-actions { display: flex; gap: 8px; }
+.topbar .btn { background: var(--accent-text); color: var(--accent); border-color: var(--accent-text); }
+.topbar .btn-ghost { background: transparent; color: var(--accent-text); border-color: var(--accent-text); }
+.topbar .icon-btn { color: var(--accent-text); }
+
+.layout { flex: 1; display: flex; min-height: 0; }
+#map { flex: 1; min-height: 0; }
+
+.sidebar {
+  width: 340px; max-width: 100%;
+  background: var(--panel);
+  border-inline-end: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; overflow-y: auto;
+}
+.sidebar input[type=search], .sidebar select { width: 100%; }
+.filters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.filters .check { grid-column: span 2; }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat { background: var(--bg); border-radius: 6px; padding: 6px; text-align: center; }
+.stat b { display: block; font-size: 18px; }
+.stat span { font-size: 11px; color: var(--muted); }
+
+.site-list { list-style: none; margin: 0; padding: 0; flex: 1; }
+.site-list li {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 8px 4px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.site-list li:hover { background: var(--bg); }
+.site-list .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex: none; }
+.site-list .name { font-weight: 600; }
+.site-list .meta { font-size: 12px; color: var(--muted); }
+
+.legend { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-inline-end: 4px; }
+
+input, select, textarea, button { font: inherit; }
+input, select, textarea {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--field); color: var(--text);
+}
+textarea { width: 100%; min-height: 60px; resize: vertical; }
+
+.btn {
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--accent-text); cursor: pointer;
+}
+.btn-ghost { background: transparent; color: var(--accent); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.small { padding: 3px 8px; font-size: 13px; }
+.icon-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); }
+
+/* Markers */
+.site-marker {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1;
+}
+.site-marker.unverified { border-style: dashed; }
+.leaflet-popup-content { direction: rtl; text-align: right; min-width: 220px; }
+.popup h3 { margin: 0 0 4px; font-size: 15px; }
+.popup .meta { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.popup .actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; }
+.warn { font-size: 11px; color: var(--warn); }
+
+/* Modal */
+.modal {
+  position: fixed; inset: 0; background: var(--overlay);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 24px 16px; overflow-y: auto; z-index: 2000;
+}
+.modal-card {
+  background: var(--panel); border-radius: 10px; width: 100%; max-width: 720px;
+  padding: 20px; position: relative;
+}
+.modal-close { position: absolute; top: 10px; left: 10px; }
+.modal h2 { margin-top: 0; font-size: 20px; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 12px; padding: 10px 12px; }
+legend { font-weight: 600; padding: 0 6px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px 12px; }
+.field { display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+.field.wide { grid-column: 1 / -1; }
+.field > span { color: var(--muted); font-size: 13px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-start; margin-top: 12px; }
+.finding { border: 1px dashed var(--border); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+.hint { font-size: 12px; color: var(--muted); }
+
+.survey-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.survey-item dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 6px 0; font-size: 14px; }
+.survey-item dt { color: var(--muted); }
+.survey-item dd { margin: 0; white-space: pre-wrap; }
+
+/* Drawing toolbar */
+.draw-bar {
+  position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%);
+  background: var(--panel); border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.3);
+  padding: 8px 12px; display: flex; gap: 8px; align-items: center; z-index: 1500;
+  max-width: calc(100% - 32px); flex-wrap: wrap;
+}
+
+.toast {
+  position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px; background: var(--toast-bg); color: var(--toast-fg);
+  padding: 10px 14px; border-radius: 8px; z-index: 3000; max-width: calc(100% - 40px);
+}
+.hidden { display: none !important; }
+
+@media (max-width: 760px) {
+  .topbar h1 { font-size: 15px; }
+  .sidebar {
+    position: fixed; top: 52px; bottom: 0; right: 0; z-index: 1200;
+    width: 88%; box-shadow: -2px 0 10px rgba(0,0,0,.25);
+  }
+  .sidebar.collapsed { display: none; }
+  #add-site-btn { padding: 6px 8px; }
+}
+@media (min-width: 761px) {
+  .sidebar.collapsed { display: none; }
+}
+
+/* While placing points on the map, markers and lines must not swallow clicks */
+#map.drawing .leaflet-marker-icon,
+#map.drawing .leaflet-interactive { pointer-events: none; }
+#map.drawing .leaflet-container, #map.drawing { cursor: crosshair; }
+
+/* Sync status */
+.sync { font-size: 12px; font-weight: 600; }
+.sync.shared { color: var(--st-clean); }
+.sync.local { color: var(--muted); }
+
+/* Confirmation dialog sits above the form modal */
+.modal.confirm { z-index: 2500; align-items: center; }
+.modal.confirm .modal-card { max-width: 380px; }
+.modal.confirm p { margin: 0 0 8px; font-size: 16px; }
+
+/* Built-in basemap: sea colour behind the land polygons */
+#map.sea, #map.sea.leaflet-container { background: var(--sea); }
+
+/* Leaflet chrome follows the theme */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+.leaflet-control-layers, .leaflet-bar a, .leaflet-bar a:hover { background-color: var(--panel); color: var(--text); }
+.leaflet-control-layers-expanded { color: var(--text); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+.leaflet-container .leaflet-control-attribution { background: var(--panel); color: var(--muted); }
+
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+</style>
+<header class="topbar">
+    <button id="toggle-sidebar" class="icon-btn" title="רשימת אתרים">☰</button>
+    <h1>סקר רשתות רפאים – ים התיכון</h1>
+    <div class="topbar-actions">
+      <button id="add-site-btn" class="btn">+ אתר חדש</button>
+      <button id="data-btn" class="btn btn-ghost">נתונים</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside id="sidebar" class="sidebar">
+      <div id="sync" class="sync local"></div>
+      <div class="stats" id="stats"></div>
+      <input id="search" type="search" placeholder="חיפוש אתר…">
+      <div class="filters">
+        <select id="filter-region">
+          <option value="">כל האזורים</option>
+          <option value="north">צפון (ראש הנקרה–עכו)</option>
+          <option value="carmel">חיפה וחוף הכרמל</option>
+          <option value="sharon">השרון</option>
+          <option value="center">גוש דן</option>
+          <option value="south">דרום</option>
+        </select>
+        <select id="filter-category">
+          <option value="">כל הסוגים</option>
+        </select>
+        <select id="filter-status">
+          <option value="">כל הסטטוסים</option>
+        </select>
+        <label class="check"><input type="checkbox" id="filter-shallow"> רק עד 15 מ'</label>
+      </div>
+      <ul id="site-list" class="site-list"></ul>
+      <div class="legend" id="legend"></div>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <!-- Floating toolbar for map-drawing modes -->
+  <div id="draw-bar" class="draw-bar hidden">
+    <span id="draw-msg"></span>
+    <button id="draw-undo" class="btn btn-ghost">בטל נקודה</button>
+    <button id="draw-done" class="btn">סיום</button>
+    <button id="draw-cancel" class="btn btn-ghost">ביטול</button>
+  </div>
+
+  <!-- Generic modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close icon-btn" id="modal-close" title="סגור">✕</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="confirm" class="modal confirm hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-msg">
+    <div class="modal-card">
+      <p id="confirm-msg"></p>
+      <div class="form-actions">
+        <button id="confirm-ok" class="btn btn-danger">מחק</button>
+        <button id="confirm-cancel" class="btn btn-ghost">ביטול</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+/*
+ * Known reefs and points of interest along the Israeli Mediterranean coast
+ * where ghost nets are likely to snag.
+ *
+ * NOTE: Positions marked src: "osm" were taken from OpenStreetMap features
+ * (islets, breakwaters, wrecks, reefs, pipelines). All others are rough
+ * estimates from general knowledge of the coast.
+ * They must be checked in the field. Inside the app, any site can be dragged
+ * to its correct location and the correction is saved with the survey data.
+ *
+ * Fields:
+ *   id        unique, stable identifier (do not change once surveys exist)
+ *   name      display name (Hebrew)
+ *   region    north | carmel | sharon | center | south
+ *   category  reef | wreck | pipe | breakwater | archaeology | island
+ *   lat, lng  WGS84 decimal degrees (for lines: first point)
+ *   line      optional [[lat,lng], ...] for linear features (pipes)
+ *   depth     [min, max] in meters, estimated
+ *   risk      high | medium | low  - estimated likelihood of snagged nets
+ *   src       "osm" = position taken from OpenStreetMap (more reliable);
+ *             missing = rough estimate from general knowledge of the coast
+ *   desc      short description
+ */
+window.DIVE_SITES = [
+  // ---------- North: Rosh Hanikra - Akko ----------
+  { id: "rosh-hanikra-reef", name: "ריף ראש הנקרה", region: "north", category: "reef",
+    lat: 33.0905, lng: 35.0990, depth: [3, 15], risk: "high",
+    desc: "רכס סלעי מול צוקי ראש הנקרה, בתחום שמורת ראש הנקרה–אכזיב. נקיקים ומערות, דייג רשתות באזור הגבול." },
+  { id: "achziv-islands", name: "איי שחף ונחליאלי", region: "north", category: "island",
+    lat: 33.0727, lng: 35.0946, src: "osm", depth: [0, 12], risk: "medium",
+    desc: "איים סלעיים קטנים בשמורת ראש הנקרה–אכזיב. רכסי כורכר וסלעים שעליהם נתפסות רשתות עומדות." },
+  { id: "achziv-reef", name: "ריף אכזיב", region: "north", category: "reef",
+    lat: 33.0480, lng: 35.0930, depth: [5, 15], risk: "high",
+    desc: "ריף סלעי מול חוף אכזיב, כ-1 ק\"מ מהחוף. עשיר בדגה ומושך דייגים." },
+  { id: "achziv-canyon", name: "קניון אכזיב (שולי)", region: "north", category: "reef",
+    lat: 33.0450, lng: 35.0600, depth: [18, 40], risk: "medium",
+    desc: "מערכת קניונים עמוקה מערבית לאכזיב. מחוץ לטווח הרדוד – לצוללנים מתקדמים / סירה." },
+  { id: "nahariya-reef", name: "ריף נהריה", region: "north", category: "reef",
+    lat: 33.0080, lng: 35.0790, depth: [4, 14], risk: "high",
+    desc: "רכס סלעי מול חופי נהריה, אזור דיג פעיל." },
+  { id: "ins-nitzan", name: "אח\"י ניצן (טבוע)", region: "north", category: "wreck",
+    lat: 33.0000, lng: 35.0650, depth: [18, 24], risk: "high",
+    desc: "ספינה שהוטבעה כאתר צלילה מערבית לנהריה, בסמוך לריף סלעי. עומק מעבר ל-15 מ'." },
+  { id: "shavei-zion-reef", name: "ריף שבי ציון", region: "north", category: "reef",
+    lat: 32.9840, lng: 35.0720, depth: [3, 12], risk: "high",
+    desc: "ריף רדוד מול שבי ציון, נקיקים ומדפים סלעיים." },
+  { id: "ins-kidon", name: "אח\"י כידון (טבוע)", region: "north", category: "wreck",
+    lat: 32.9830, lng: 35.0560, depth: [18, 26], risk: "high",
+    desc: "ספינת טילים שהוטבעה מול האנדרטה בשבי ציון. מבנה מתכת שרשתות נתפסות בו." },
+  { id: "akko-sea-wall", name: "חומת הים של עכו", region: "north", category: "archaeology",
+    lat: 32.9210, lng: 35.0650, depth: [0, 8], risk: "medium",
+    desc: "קרקעית סלעית ושרידים ארכאולוגיים מול חומת העיר העתיקה." },
+  { id: "akko-flies-tower", name: "מגדל הזבובים – עכו", region: "north", category: "breakwater",
+    lat: 32.9186, lng: 35.0721, src: "osm", depth: [0, 8], risk: "high",
+    desc: "שובר הגלים העתיק ושרידי המגדל בכניסה לנמל עכו. סלעים ושברי אבן לוכדים רשתות." },
+  { id: "akko-reef", name: "ריף עכו (מערבי)", region: "north", category: "reef",
+    lat: 32.9230, lng: 35.0530, depth: [6, 15], risk: "medium",
+    desc: "רכס סלעי מערבית לעיר העתיקה." },
+
+  // ---------- Haifa & Carmel coast ----------
+  { id: "bat-galim", name: "בת גלים – שובר גלים", region: "carmel", category: "breakwater",
+    lat: 32.8358, lng: 34.9788, src: "osm", depth: [0, 8], risk: "medium",
+    desc: "שוברי הגלים והטיילת בבת גלים. אזור דייגי חכות – חוטי דיג וקרסים." },
+  { id: "shikmona", name: "שקמונה", region: "carmel", category: "reef",
+    lat: 32.8270, lng: 34.9530, depth: [2, 12], risk: "high",
+    desc: "מדף סלעי ונקיקים מול תל שקמונה, אתר צלילה מוכר בחיפה." },
+  { id: "dado-reef", name: "ריף חוף דדו", region: "carmel", category: "reef",
+    lat: 32.8056, lng: 34.9543, src: "osm", depth: [4, 12], risk: "medium",
+    desc: "רכס כורכר מקביל לחוף מול חוף דדו/זמיר." },
+  { id: "atlit-castle", name: "מבצר עתלית – נמל עתיק", region: "carmel", category: "archaeology",
+    lat: 32.7050, lng: 34.9310, depth: [0, 10], risk: "high",
+    desc: "שרידי הנמל הצלבני והפיניקי בעתלית. אזור סגור חלקית (בסיס צבאי) – נדרש תיאום." },
+  { id: "atlit-north-bay", name: "מפרץ עתלית הצפוני", region: "carmel", category: "archaeology",
+    lat: 32.7120, lng: 34.9370, depth: [0, 6], risk: "medium",
+    desc: "מפרץ רדוד עם שרידי נמל עתיק." },
+  { id: "neve-yam", name: "נווה ים", region: "carmel", category: "reef",
+    lat: 32.6775, lng: 34.9257, src: "osm", depth: [2, 10], risk: "medium",
+    desc: "אי תמנון ורכס הכורכר מול נווה ים." },
+  { id: "habonim-reef", name: "ריף הבונים", region: "carmel", category: "reef",
+    lat: 32.6400, lng: 34.9130, depth: [2, 12], risk: "high",
+    desc: "שמורת חוף הבונים – רכסי כורכר ומפרצונים." },
+  { id: "dor-lagoon", name: "לגונת דור – נחשולים", region: "carmel", category: "archaeology",
+    lat: 32.6150, lng: 34.9140, depth: [0, 6], risk: "medium",
+    desc: "לגונה עם איים ושרידי ספינות טרופות היסטוריות. אזור דייגי חוף." },
+  { id: "dor-islands", name: "איי דור (טפת, דור, חופמי, שחפית)", region: "carmel", category: "island",
+    lat: 32.608, lng: 34.914, src: "osm", depth: [2, 12], risk: "high",
+    desc: "האיים מערבית ללגונת דור. סלעים חשופים לגלים – רשתות נסחפות ונתפסות." },
+  { id: "maagan-michael", name: "מעגן מיכאל – אי יונים והאיים", region: "carmel", category: "reef",
+    lat: 32.5553, lng: 34.9026, src: "osm", depth: [3, 12], risk: "medium",
+    desc: "ריף כורכר מול מעגן מיכאל, אזור ממצאי ספינה עתיקה." },
+  { id: "caesarea-harbor", name: "נמל קיסריה העתיק – פארק תת-ימי", region: "carmel", category: "archaeology",
+    lat: 32.5020, lng: 34.8870, depth: [1, 10], risk: "high",
+    desc: "שרידי שוברי הגלים של נמל הורדוס. בלוקים ועמודים – לכידת רשתות וחוטים." },
+  { id: "sdot-yam", name: "שדות ים", region: "carmel", category: "reef",
+    lat: 32.4890, lng: 34.8820, depth: [2, 10], risk: "medium",
+    desc: "ריף כורכר ושרידים ארכאולוגיים מול שדות ים." },
+
+  // ---------- Sharon ----------
+  { id: "orot-rabin", name: "אורות רבין (חדרה) – צנרת ומזח פחם", region: "sharon", category: "pipe",
+    lat: 32.4715, lng: 34.8815, src: "osm", depth: [3, 20], risk: "high",
+    desc: "מזח הפחם, צינורות הקירור ומתקן ההתפלה בחדרה. אזור מוגבל – נדרש תיאום עם חברת החשמל/המתקן." },
+  { id: "givat-olga", name: "גבעת אולגה", region: "sharon", category: "reef",
+    lat: 32.4420, lng: 34.8620, depth: [3, 12], risk: "medium",
+    desc: "רכס כורכר מקביל לחוף מול גבעת אולגה." },
+  { id: "michmoret-reef", name: "ריף מכמורת (חוף כושי)", region: "sharon", category: "reef",
+    lat: 32.4050, lng: 34.8580, depth: [6, 15], risk: "high",
+    desc: "ריף עם נקיקים ומערות כ-800 מ' מערבית לחוף. מועדון צלילה ובית ספר ימי בקרבת מקום." },
+  { id: "beit-yanai", name: "בית ינאי", region: "sharon", category: "reef",
+    lat: 32.3870, lng: 34.8560, depth: [3, 10], risk: "medium",
+    desc: "רכסים רדודים מול שפך נחל אלכסנדר." },
+  { id: "netanya-reef", name: "נתניה – שוברי גלים וריף", region: "sharon", category: "reef",
+    lat: 32.32, lng: 34.842, src: "osm", depth: [4, 12], risk: "medium",
+    desc: "רכס כורכר מול חופי נתניה, כולל שוברי גלים מנותקים." },
+  { id: "poleg", name: "חוף פולג", region: "sharon", category: "reef",
+    lat: 32.2700, lng: 34.8240, depth: [3, 10], risk: "low",
+    desc: "רכסים רדודים מול שמורת פולג." },
+  { id: "gaash", name: "געש", region: "sharon", category: "reef",
+    lat: 32.2250, lng: 34.8120, depth: [3, 12], risk: "medium",
+    desc: "מדף סלעי מתחת למצוק החוף." },
+  { id: "apollonia", name: "אפולוניה – סידנא עלי", region: "sharon", category: "archaeology",
+    lat: 32.1930, lng: 34.8020, depth: [2, 10], risk: "medium",
+    desc: "שרידי נמל אפולוניה והמדף הסלעי מתחת לגן הלאומי." },
+  { id: "herzliya-marina", name: "מרינה הרצליה – שובר גלים", region: "sharon", category: "breakwater",
+    lat: 32.1647, lng: 34.795, src: "osm", depth: [2, 10], risk: "high",
+    desc: "שובר הגלים הראשי של המרינה. אבני שובר לוכדות רשתות וחוטי דיג." },
+
+  // ---------- Tel Aviv / Center ----------
+  { id: "reading-pipe", name: "הצינור הישן של רידינג", region: "center", category: "pipe",
+    lat: 32.1096, lng: 34.7775, src: "osm",
+    line: [[32.10964, 34.77753], [32.11055, 34.77555]],
+    depth: [2, 12], risk: "high",
+    desc: "צינור הקירור הישן של תחנת הכוח רידינג, נמשך מערבה מהחוף. מבנה ליניארי שרשתות נגררות ונתפסות לאורכו. התוואי לפי OpenStreetMap (מקטע תת-ימי ליד שובר הגלים של רידינג) – ייתכן שהצינור ממשיך הלאה מערבה." },
+  { id: "tel-aviv-port", name: "נמל תל אביב – שובר גלים", region: "center", category: "breakwater",
+    lat: 32.0989, lng: 34.7726, src: "osm", depth: [1, 8], risk: "high",
+    desc: "שובר הגלים של הנמל הישן ושפך הירקון. אזור דייגי חכות." },
+  { id: "tlv-detached-breakwaters", name: "שוברי גלים מנותקים – חופי ת\"א", region: "center", category: "breakwater",
+    lat: 32.0777, lng: 34.7637, src: "osm", depth: [1, 6], risk: "medium",
+    desc: "שורת שוברי הגלים המנותקים מול חופי תל אביב (גורדון–פרישמן)." },
+  { id: "tlv-marina", name: "מרינה תל אביב", region: "center", category: "breakwater",
+    lat: 32.087, lng: 34.7675, src: "osm", depth: [2, 8], risk: "high",
+    desc: "שובר הגלים של המרינה. אזור דיג פעיל." },
+  { id: "gordon-reef", name: "מערות גורדון", region: "center", category: "reef",
+    lat: 32.0858, lng: 34.7638, src: "osm", depth: [4, 12], risk: "medium",
+    desc: "אזור סלעי עם נקיקים, תעלות ומערות כ-100 מ' ויותר מהחוף." },
+  { id: "jaffa-port", name: "נמל יפו – סלע אנדרומדה", region: "center", category: "breakwater",
+    lat: 32.0545, lng: 34.7495, src: "osm", depth: [1, 10], risk: "high",
+    desc: "שובר הגלים של נמל יפו וסלע אנדרומדה. שרידי ספינה טרופה ליד הסלע (OSM). אחד האזורים הצפופים בדיג." },
+  { id: "bilbeis-wreck", name: "שרידי הבילביס (יפו)", region: "center", category: "wreck",
+    lat: 32.0402, lng: 34.7425, src: "osm", depth: [5, 7], risk: "high",
+    desc: "ספינה שבורה לכמה חלקים (שרידים נוספים כ-100 מ' מזרחה), אורך 70–90 מ', בעומק 5–7 מ'. מתכת וחלקים בולטים לוכדים רשתות." },
+  { id: "bat-yam-reef", name: "בת ים – סלע אדם ושובר הגלים", region: "center", category: "reef",
+    lat: 32.0235, lng: 34.7375, src: "osm", depth: [3, 10], risk: "medium",
+    desc: "רכס כורכר ושוברי גלים מול בת ים." },
+
+  // ---------- South ----------
+  { id: "palmachim", name: "פלמחים – ריף", region: "south", category: "reef",
+    lat: 31.9300, lng: 34.6880, depth: [2, 10], risk: "medium",
+    desc: "רכסי כורכר מול חוף פלמחים." },
+  { id: "palmachim-outfall", name: "צינור שפד\"ן / התפלה – פלמחים", region: "south", category: "pipe",
+    lat: 31.9450, lng: 34.6850, depth: [3, 20], risk: "high",
+    desc: "צנרת יניקה/הזרמה של מתקני ההתפלה והשפד\"ן באזור. מיקום משוער, ייתכן אזור מוגבל." },
+  { id: "yavne-yam", name: "יבנה ים – נמל עתיק", region: "south", category: "archaeology",
+    lat: 31.9200, lng: 34.6860, depth: [1, 8], risk: "medium",
+    desc: "מפרץ רדוד ושרידי נמל עתיק מתחת למצודת יבנה ים." },
+  { id: "ashdod-breakwater", name: "מרינה אשדוד – שובר גלים", region: "south", category: "breakwater",
+    lat: 31.7963, lng: 34.6265, src: "osm", depth: [1, 8], risk: "medium",
+    desc: "שוברי גלים מנותקים בחופי אשדוד. אזור דייגי חכות." },
+  { id: "ashkelon-marina", name: "מרינה אשקלון", region: "south", category: "breakwater",
+    lat: 31.6836, lng: 34.557, src: "osm", depth: [2, 8], risk: "high",
+    desc: "שובר הגלים של המרינה. אזור דיג פעיל." },
+  { id: "ashkelon-reef", name: "ריף אשקלון (תל אשקלון)", region: "south", category: "reef",
+    lat: 31.6650, lng: 34.5380, depth: [3, 12], risk: "medium",
+    desc: "רכסים ושרידים ארכאולוגיים מול הגן הלאומי אשקלון." },
+  { id: "rutenberg", name: "רוטנברג – צנרת ומזח פחם", region: "south", category: "pipe",
+    lat: 31.6386, lng: 34.52, src: "osm", depth: [3, 20], risk: "high",
+    desc: "מזח הפחם וצינורות הקירור של תחנת הכוח ומתקן ההתפלה. אזור מוגבל – נדרש תיאום." },
+  // ---------- Added from OpenStreetMap ----------
+  { id: "achziv-island", name: "אי אכזיב ואיי השוניות", region: "north", category: "island",
+    lat: 33.0420, lng: 35.0830, src: "osm", depth: [0, 12], risk: "high",
+    desc: "אי אכזיב ואיי שוניות אכזיב מול החוף. רכסים סלעיים חשופים לגלים." },
+  { id: "nahariya-marina", name: "מעגן נהריה", region: "north", category: "breakwater",
+    lat: 33.0127, lng: 35.0890, src: "osm", depth: [1, 6], risk: "high",
+    desc: "מעגן הסירות של נהריה ושובר הגלים שלו. נקודת יציאה של דייגים." },
+  { id: "shavei-zion-breakwater", name: "שובר גלים שבי ציון", region: "north", category: "breakwater",
+    lat: 32.9833, lng: 35.0801, src: "osm", depth: [1, 6], risk: "medium",
+    desc: "שובר הגלים מול שבי ציון." },
+  { id: "arlosoroff-wreck", name: "אניית המעפילים חיים ארלוזורוב", region: "carmel", category: "wreck",
+    lat: 32.8375, lng: 34.9815, src: "osm", depth: [2, 6], risk: "high",
+    desc: "שרידי אניית המעפילים מול בת גלים, ליד שובר הגלים." },
+  { id: "dogruyollar-wreck", name: "שרידי MV Dogruyollar II", region: "carmel", category: "wreck",
+    lat: 32.8412, lng: 34.9740, src: "osm", depth: [3, 12], risk: "high",
+    desc: "ספינה טרופה צפונית-מערבית לבת גלים." },
+  { id: "dor-reef", name: "ריף דור", region: "carmel", category: "reef",
+    lat: 32.6225, lng: 34.9178, src: "osm", depth: [1, 6], risk: "medium",
+    desc: "ריף סלעי צפונית ללגונת דור (ממופה ב-OSM)." },
+  { id: "wallsend-wreck", name: "SS Wallsend", region: "carmel", category: "wreck",
+    lat: 32.6343, lng: 34.9209, src: "osm", depth: [2, 8], risk: "high",
+    desc: "ספינה טרופה מול חוף הבונים–דור." },
+  { id: "netz-wreck", name: "ספינת הדיג נץ", region: "carmel", category: "wreck",
+    lat: 32.6500, lng: 34.9256, src: "osm", depth: [0, 4], risk: "medium",
+    desc: "שרידי סירת דיג ישנה ליד החוף, צפונית לחוף הבונים." },
+  { id: "jisr-fishing-harbor", name: "נמל הדייגים ג'סר א-זרקא", region: "carmel", category: "breakwater",
+    lat: 32.5372, lng: 34.9015, src: "osm", depth: [1, 6], risk: "high",
+    desc: "נמל דייגים פעיל. ריכוז גבוה של רשתות וציוד דיג באזור." },
+  { id: "saar-wreck", name: "שרידי ספינת סער (געש)", region: "sharon", category: "wreck",
+    lat: 32.2090, lng: 34.8111, src: "osm", depth: [2, 6], risk: "high",
+    desc: "ספינה טרופה מול חוף געש." },
+  { id: "tel-baruch-breakwater", name: "שובר גלים תל ברוך", region: "center", category: "breakwater",
+    lat: 32.1215, lng: 34.7812, src: "osm", depth: [1, 6], risk: "medium",
+    desc: "שובר גלים בחוף תל ברוך, צפונית לרידינג." },
+  { id: "reading-breakwater", name: "שובר הגלים של רידינג", region: "center", category: "breakwater",
+    lat: 32.1079, lng: 34.7759, src: "osm", depth: [1, 8], risk: "high",
+    desc: "שובר הגלים ליד תחנת הכוח רידינג, נקודת המוצא של הצינור הישן. אזור דייגי חכות." },
+  { id: "palmachim-wreck", name: "ספינה טרופה – פלמחים", region: "south", category: "wreck",
+    lat: 31.9311, lng: 34.6960, src: "osm", depth: [2, 6], risk: "high",
+    desc: "שרידי ספינה מול חוף פלמחים (ללא שם ב-OSM)." },
+  { id: "zikim-breakwaters", name: "שוברי גלים זיקים", region: "south", category: "breakwater",
+    lat: 31.5610, lng: 34.4650, src: "osm", depth: [1, 6], risk: "medium",
+    desc: "שורת שוברי גלים מנותקים בחוף זיקים. קרוב לגבול – נדרש תיאום ביטחוני." }
+];
+
+</script>
+  <script>
+/* Land polygons built from OpenStreetMap coastline (c) OpenStreetMap contributors, ODbL. */
+window.COAST_LAND = {"type":"FeatureCollection","features":[{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91419,32.60316],[34.91429,32.60306],[34.9145,32.60304],[34.91433,32.60322],[34.91421,32.60324],[34.91419,32.60316]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.10413,33.09268],[35.10399,33.09249],[35.10406,33.09249],[35.10416,33.09265],[35.10413,33.09268]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.92042,32.63596],[34.92061,32.636],[34.92067,32.63611],[34.92061,32.6362],[34.92052,32.63624],[34.92032,32.63618],[34.9203,32.63603],[34.92042,32.63596]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.1472,33.12999],[35.14538,33.1278],[35.14512,33.12784],[35.14493,33.1278],[35.14493,33.12773],[35.14524,33.12758],[35.14518,33.12749],[35.14477,33.12759],[35.14506,33.12725],[35.145,33.12712],[35.14502,33.12694],[35.14496,33.12688],[35.14482,33.12682],[35.14464,33.12684],[35.14442,33.12704],[35.14381,33.12672],[35.14389,33.12664],[35.14412,33.12662],[35.14401,33.12665],[35.14403,33.12674],[35.14436,33.12684],[35.14445,33.12677],[35.14468,33.12658],[35.14466,33.12647],[35.14442,33.12625],[35.14429,33.12628],[35.14403,33.12656],[35.14412,33.12632],[35.14395,33.1262],[35.1437,33.12621],[35.1435,33.12638],[35.14315,33.12646],[35.14328,33.1269],[35.14306,33.12793],[35.14312,33.12801],[35.14284,33.12813],[35.1427,33.12799],[35.14267,33.12783],[35.1429,33.12688],[35.1428,33.12641],[35.14262,33.12629],[35.13979,33.12592],[35.13951,33.12598],[35.13939,33.12596],[35.13941,33.12584],[35.1384,33.12575],[35.13743,33.12555],[35.13712,33.12525],[35.13677,33.12512],[35.13588,33.12515],[35.13541,33.12483],[35.13486,33.12468],[35.13458,33.12424],[35.13427,33.12394],[35.13393,33.12381],[35.13344,33.12329],[35.13315,33.12268],[35.13285,33.12279],[35.13275,33.1226],[35.1329,33.12245],[35.13103,33.12136],[35.13075,33.1213],[35.13097,33.12102],[35.13084,33.1208],[35.13026,33.12042],[35.12993,33.12039],[35.12728,33.11964],[35.12643,33.11928],[35.12597,33.11931],[35.12473,33.11869],[35.1246,33.11843],[35.12411,33.11831],[35.12302,33.11785],[35.12247,33.11742],[35.12276,33.11725],[35.12255,33.11693],[35.12142,33.11648],[35.12079,33.11635],[35.12047,33.11621],[35.12046,33.11593],[35.11977,33.11569],[35.11907,33.11559],[35.11842,33.11534],[35.11828,33.1155],[35.11789,33.11541],[35.11793,33.11527],[35.11741,33.11517],[35.11704,33.11545],[35.11673,33.11557],[35.11589,33.11516],[35.11578,33.11488],[35.11554,33.11456],[35.11558,33.11417],[35.11533,33.11417],[35.1151,33.11428],[35.11504,33.11423],[35.11513,33.11405],[35.11506,33.11395],[35.11467,33.11385],[35.11389,33.11297],[35.11338,33.11288],[35.11285,33.11254],[35.11252,33.11212],[35.11231,33.11163],[35.11249,33.11133],[35.11284,33.1111],[35.11212,33.11073],[35.11196,33.11053],[35.11211,33.11038],[35.11208,33.11018],[35.1118,33.1102],[35.11165,33.11002],[35.11175,33.10991],[35.11178,33.10949],[35.11163,33.10927],[35.11132,33.10943],[35.11073,33.10877],[35.11022,33.10847],[35.1099,33.10815],[35.10955,33.10811],[35.10969,33.1079],[35.10983,33.10722],[35.10952,33.10699],[35.10933,33.10718],[35.10912,33.10716],[35.10927,33.10691],[35.10945,33.10685],[35.10941,33.10673],[35.10919,33.1065],[35.10893,33.10654],[35.1084,33.10612],[35.10803,33.10562],[35.10814,33.10532],[35.1078,33.10508],[35.10791,33.1046],[35.10721,33.10372],[35.10648,33.10264],[35.10632,33.1025],[35.10606,33.10194],[35.10592,33.10137],[35.10606,33.10115],[35.10627,33.10098],[35.10623,33.10057],[35.10596,33.10017],[35.10632,33.10009],[35.1061,33.09986],[35.106,33.09965],[35.10618,33.09947],[35.105,33.09813],[35.10466,33.09728],[35.10442,33.096],[35.10356,33.0943],[35.10377,33.09425],[35.10361,33.09424],[35.10352,33.09401],[35.10387,33.09404],[35.10395,33.09397],[35.10387,33.09381],[35.10392,33.09376],[35.1039,33.09357],[35.10406,33.09338],[35.10382,33.09287],[35.10387,33.09282],[35.10426,33.09288],[35.1043,33.09272],[35.10416,33.09245],[35.10453,33.09238],[35.10455,33.09218],[35.10461,33.09216],[35.10472,33.0922],[35.10472,33.09226],[35.10583,33.09202],[35.106,33.09177],[35.10584,33.0916],[35.10555,33.09152],[35.10578,33.09122],[35.10548,33.09117],[35.10525,33.09122],[35.10522,33.09104],[35.10554,33.09082],[35.10513,33.09069],[35.10504,33.09051],[35.10515,33.08944],[35.10546,33.08864],[35.10572,33.08854],[35.10554,33.08807],[35.10526,33.08603],[35.10553,33.08577],[35.10502,33.0853],[35.10532,33.08481],[35.10569,33.08276],[35.10527,33.07581],[35.10473,33.07301],[35.10446,33.07006],[35.10468,33.06971],[35.10439,33.06789],[35.10458,33.06661],[35.10396,33.06517],[35.10339,33.06251],[35.1039,33.06221],[35.10335,33.06097],[35.10311,33.05737],[35.10263,33.05732],[35.10249,33.05687],[35.10213,33.0567],[35.10203,33.05639],[35.10214,33.05594],[35.10247,33.05584],[35.10246,33.05559],[35.10179,33.0552],[35.10169,33.05497],[35.1023,33.0546],[35.10221,33.05426],[35.10185,33.05355],[35.10173,33.05305],[35.10211,33.05272],[35.10208,33.05225],[35.10159,33.0522],[35.10124,33.05192],[35.10142,33.05154],[35.10191,33.0511],[35.10185,33.05054],[35.10139,33.05034],[35.1005,33.04976],[35.10034,33.0495],[35.10049,33.04933],[35.10088,33.04924],[35.10102,33.04905],[35.10111,33.04878],[35.10087,33.04869],[35.10048,33.04877],[35.10024,33.0487],[35.09992,33.04808],[35.10055,33.0478],[35.10081,33.04729],[35.10027,33.04689],[35.1006,33.04636],[35.10064,33.0456],[35.10004,33.04355],[35.09804,33.04307],[35.09805,33.04239],[35.09725,33.04192],[35.09693,33.04129],[35.09694,33.04103],[35.09701,33.0409],[35.09685,33.04001],[35.09765,33.03948],[35.09692,33.0374],[35.09663,33.03687],[35.09604,33.03628],[35.09382,33.02823],[35.09395,33.02766],[35.09378,33.02692],[35.0933,33.02589],[35.08934,33.01286],[35.08935,33.01265],[35.0891,33.01246],[35.08877,33.01246],[35.08869,33.01305],[35.08857,33.01309],[35.08845,33.01303],[35.08852,33.01243],[35.08871,33.01225],[35.0891,33.01226],[35.08914,33.01218],[35.08917,33.01202],[35.08902,33.01148],[35.08844,33.01129],[35.08834,33.01134],[35.08841,33.01163],[35.08833,33.01166],[35.08746,33.01001],[35.08754,33.00997],[35.08772,33.01031],[35.0879,33.0105],[35.0881,33.01056],[35.08832,33.01054],[35.08862,33.01039],[35.0887,33.01021],[35.08848,33.0093],[35.08809,33.00907],[35.08793,33.00887],[35.08751,33.00898],[35.08761,33.00883],[35.08798,33.00877],[35.08813,33.00863],[35.08812,33.00834],[35.08808,33.00816],[35.08785,33.00781],[35.08773,33.007],[35.08702,33.0049],[35.08603,33.0009],[35.08539,32.99933],[35.08465,32.99674],[35.08392,32.99483],[35.08249,32.99209],[35.08118,32.98758],[35.0816,32.98507],[35.08169,32.98382],[35.08138,32.98355],[35.0812,32.98327],[35.08084,32.98333],[35.08051,32.9836],[35.08032,32.98365],[35.07979,32.98327],[35.07983,32.98291],[35.07995,32.98287],[35.08004,32.98292],[35.07998,32.98311],[35.08006,32.98323],[35.08036,32.98341],[35.08062,32.98325],[35.08082,32.98285],[35.08074,32.98235],[35.08073,32.98153],[35.08041,32.98091],[35.07973,32.97809],[35.0786,32.97529],[35.07781,32.97305],[35.07691,32.96982],[35.07686,32.96958],[35.07695,32.9693],[35.07667,32.96919],[35.07583,32.96541],[35.07592,32.9651],[35.07584,32.96451],[35.07561,32.96418],[35.07574,32.96411],[35.07552,32.96303],[35.0754,32.96279],[35.07552,32.96275],[35.07536,32.96259],[35.07524,32.96227],[35.07541,32.96203],[35.07523,32.96175],[35.07517,32.95925],[35.07486,32.95893],[35.0746,32.95885],[35.0749,32.95828],[35.07484,32.95726],[35.07496,32.95706],[35.07495,32.95652],[35.07477,32.9555],[35.07484,32.95524],[35.07473,32.95493],[35.07467,32.95431],[35.07474,32.95418],[35.07455,32.95282],[35.07441,32.95235],[35.07439,32.9518],[35.07445,32.95108],[35.07434,32.95073],[35.07438,32.9504],[35.07428,32.94935],[35.07415,32.94925],[35.07398,32.94751],[35.07383,32.94682],[35.07368,32.94671],[35.07368,32.94653],[35.07348,32.94648],[35.07342,32.94632],[35.07336,32.94495],[35.07351,32.94465],[35.07344,32.94441],[35.07319,32.94414],[35.07302,32.94358],[35.0733,32.94279],[35.07337,32.94188],[35.07299,32.94077],[35.07284,32.94063],[35.0729,32.94052],[35.07282,32.94026],[35.07283,32.93994],[35.07242,32.93948],[35.07242,32.93916],[35.07256,32.93892],[35.07247,32.93849],[35.07235,32.93835],[35.07241,32.93736],[35.07228,32.93708],[35.07237,32.93665],[35.07231,32.93624],[35.07219,32.93617],[35.0725,32.93601],[35.0721,32.93501],[35.07193,32.93497],[35.07187,32.93469],[35.07203,32.93456],[35.0721,32.93418],[35.07178,32.93335],[35.07145,32.93296],[35.07128,32.93302],[35.07093,32.9323],[35.0707,32.93223],[35.07078,32.93215],[35.07053,32.9318],[35.07065,32.93168],[35.07055,32.93143],[35.07036,32.93123],[35.07011,32.93124],[35.06987,32.93083],[35.06989,32.93046],[35.0697,32.93018],[35.06972,32.92995],[35.06962,32.92989],[35.0695,32.92953],[35.06923,32.92916],[35.0692,32.92886],[35.06926,32.92885],[35.06904,32.92858],[35.06894,32.92814],[35.06901,32.92809],[35.06895,32.92735],[35.06879,32.92707],[35.06871,32.92668],[35.0685,32.92644],[35.06846,32.92598],[35.06831,32.92596],[35.06832,32.92542],[35.06806,32.92492],[35.06763,32.92502],[35.06755,32.92491],[35.06758,32.92479],[35.06775,32.92461],[35.06746,32.92421],[35.06756,32.92415],[35.06706,32.92264],[35.06698,32.92265],[35.06693,32.9225],[35.06701,32.92248],[35.06645,32.92089],[35.06607,32.92086],[35.06574,32.92064],[35.06557,32.92048],[35.06557,32.92036],[35.06538,32.92031],[35.06542,32.92014],[35.06529,32.91999],[35.06528,32.91987],[35.06548,32.91981],[35.06539,32.91977],[35.06558,32.91947],[35.06605,32.91936],[35.06627,32.91922],[35.06632,32.91906],[35.06647,32.91904],[35.06656,32.91913],[35.06674,32.91916],[35.06752,32.91909],[35.06797,32.91932],[35.06818,32.9193],[35.06831,32.91915],[35.06826,32.91904],[35.06851,32.91889],[35.06858,32.91911],[35.0689,32.91924],[35.06891,32.91897],[35.06922,32.91889],[35.07045,32.91882],[35.07076,32.91906],[35.07083,32.91924],[35.07073,32.91928],[35.07034,32.9189],[35.06936,32.919],[35.06912,32.91912],[35.0691,32.9193],[35.06917,32.9195],[35.06956,32.91989],[35.06962,32.91992],[35.06966,32.91983],[35.06977,32.91984],[35.06977,32.91992],[35.07027,32.92],[35.07017,32.9203],[35.07062,32.92082],[35.07092,32.92114],[35.07143,32.92137],[35.07171,32.92165],[35.0731,32.92144],[35.07352,32.92131],[35.07361,32.92139],[35.07598,32.92041],[35.07699,32.91993],[35.07724,32.92001],[35.07823,32.91905],[35.07919,32.91759],[35.08009,32.91564],[35.08058,32.9136],[35.08085,32.90908],[35.08047,32.90293],[35.07985,32.89842],[35.07847,32.89319],[35.07602,32.88435],[35.06766,32.86194],[35.06648,32.85921],[35.06613,32.85855],[35.06452,32.85498],[35.05911,32.84479],[35.05607,32.83986],[35.05218,32.83462],[35.05133,32.83364],[35.0496,32.83125],[35.04801,32.82937],[35.04552,32.82668],[35.0442,32.82563],[35.04292,32.8249],[35.04044,32.82395],[35.03959,32.82373],[35.03811,32.82339],[35.03368,32.8297],[35.03306,32.83037],[35.03241,32.83083],[35.03185,32.83113],[35.03114,32.83142],[35.03058,32.83157],[35.02971,32.83168],[35.02349,32.83169],[35.02351,32.83149],[35.02621,32.83146],[35.02729,32.82429],[35.03201,32.82482],[35.03424,32.81871],[35.03279,32.81794],[35.03276,32.81786],[35.03238,32.81761],[35.03156,32.8173],[35.02672,32.81583],[35.0258,32.81624],[35.02565,32.81603],[35.02788,32.81507],[35.03055,32.81589],[35.03193,32.81257],[35.03592,32.81385],[35.03675,32.81182],[35.03005,32.80954],[35.02977,32.80864],[35.02924,32.80876],[35.02901,32.80871],[35.02884,32.8086],[35.02872,32.80827],[35.02882,32.80821],[35.02872,32.80733],[35.02885,32.80724],[35.02878,32.80701],[35.03194,32.80631],[35.0313,32.80436],[35.02968,32.80472],[35.02956,32.80487],[35.02954,32.80577],[35.02862,32.80596],[35.02852,32.80616],[35.02835,32.80622],[35.02819,32.80617],[35.02812,32.80609],[35.02751,32.80622],[35.02754,32.80658],[35.0279,32.80677],[35.02801,32.80706],[35.02816,32.80705],[35.02824,32.80751],[35.02801,32.80751],[35.0279,32.80735],[35.02803,32.80836],[35.02785,32.80849],[35.02797,32.80883],[35.02796,32.81211],[35.02571,32.81391],[35.02548,32.81372],[35.02526,32.8137],[35.02529,32.81424],[35.02479,32.81468],[35.0247,32.8146],[35.02483,32.81448],[35.02489,32.81453],[35.02524,32.81421],[35.0252,32.81365],[35.02512,32.81366],[35.0248,32.81412],[35.02449,32.81427],[35.02397,32.81412],[35.02329,32.81431],[35.02305,32.8149],[35.02287,32.81499],[35.02282,32.81496],[35.02317,32.81435],[35.02313,32.81425],[35.02325,32.81421],[35.02362,32.81346],[35.02338,32.81337],[35.01961,32.81273],[35.01972,32.8136],[35.01982,32.81393],[35.01995,32.8141],[35.02017,32.81419],[35.02019,32.81432],[35.02046,32.81449],[35.02141,32.81483],[35.02154,32.81482],[35.02158,32.81489],[35.0224,32.81534],[35.0225,32.81525],[35.02251,32.81534],[35.02242,32.81542],[35.02296,32.81589],[35.0229,32.81603],[35.02275,32.81598],[35.02245,32.81559],[35.0221,32.81529],[35.02154,32.81501],[35.02034,32.81456],[35.02002,32.81435],[35.01973,32.81405],[35.01956,32.81372],[35.01929,32.81243],[35.01923,32.81238],[35.01901,32.81231],[35.01808,32.81243],[35.01773,32.81235],[35.01625,32.82022],[35.01555,32.82105],[35.0129,32.8207],[35.01405,32.8145],[35.01324,32.81445],[35.01144,32.81413],[35.00943,32.82281],[35.00845,32.82294],[35.0071,32.82238],[35.007,32.82245],[35.00687,32.82239],[35.00691,32.82228],[35.00706,32.82227],[35.00817,32.82274],[35.00821,32.82216],[35.00784,32.82201],[35.00786,32.82173],[35.00711,32.82167],[35.007,32.82158],[35.00737,32.81985],[35.00674,32.81971],[35.00666,32.81963],[35.00669,32.81944],[35.0065,32.8192],[35.00681,32.81821],[35.00672,32.8182],[35.00556,32.8217],[35.00544,32.82182],[35.00537,32.82167],[35.00654,32.81819],[35.0057,32.81811],[35.00478,32.82066],[35.00467,32.82064],[35.00466,32.82053],[35.00549,32.81809],[35.00432,32.81802],[34.9992,32.82339],[34.99149,32.82609],[34.99194,32.8271],[34.99218,32.82698],[34.9923,32.82722],[34.9941,32.82664],[34.99418,32.82677],[34.99215,32.82744],[34.99237,32.82792],[34.99081,32.82841],[34.9906,32.82869],[34.99096,32.82856],[34.99099,32.82861],[34.99058,32.82877],[34.99093,32.8294],[34.99201,32.829],[34.99207,32.82913],[34.99057,32.82966],[34.99066,32.82984],[34.99148,32.82955],[34.99163,32.82983],[34.9915,32.82987],[34.99169,32.83025],[34.99398,32.82934],[34.99413,32.82958],[34.99432,32.82951],[34.9945,32.82932],[34.99432,32.82895],[34.99438,32.82892],[34.99457,32.82931],[34.99494,32.82927],[34.99505,32.82921],[34.99507,32.82911],[34.99487,32.82873],[34.99495,32.8287],[34.99515,32.8291],[34.99533,32.82903],[34.99541,32.82913],[34.99686,32.82859],[34.99677,32.82839],[34.99724,32.82826],[34.99677,32.82727],[34.99691,32.82722],[34.99739,32.8282],[34.99806,32.82793],[34.99805,32.82784],[34.9982,32.82777],[34.99778,32.82689],[34.99791,32.82684],[34.99832,32.82776],[34.99881,32.82753],[34.99838,32.82668],[34.99852,32.82662],[34.99895,32.82749],[34.99981,32.82718],[34.99937,32.8263],[34.99952,32.82625],[34.99995,32.82713],[35.00039,32.82699],[35.00068,32.82728],[35.00496,32.82577],[35.0063,32.82549],[35.00807,32.8254],[35.01032,32.82558],[35.01052,32.82568],[35.01458,32.82671],[35.016,32.82727],[35.01623,32.8273],[35.01644,32.82746],[35.01782,32.8293],[35.0184,32.83034],[35.01879,32.8317],[35.01929,32.8348],[35.01927,32.83493],[35.01913,32.83503],[35.01903,32.83503],[35.01886,32.8349],[35.01825,32.83123],[35.01804,32.83057],[35.01773,32.82993],[35.01727,32.82924],[35.01608,32.8277],[35.01531,32.82723],[35.01456,32.82693],[35.01049,32.82587],[35.01028,32.82589],[35.00995,32.82582],[35.00954,32.82561],[35.00722,32.82554],[35.00625,32.82564],[35.00509,32.8259],[35.00074,32.8274],[34.99779,32.82853],[34.99861,32.83155],[34.99875,32.83177],[34.99866,32.83192],[34.99847,32.83194],[34.99839,32.83187],[34.99842,32.83168],[34.99802,32.83031],[34.99716,32.83062],[34.99666,32.8298],[34.99607,32.83005],[34.99648,32.83086],[34.99622,32.83095],[34.99582,32.83014],[34.99571,32.83017],[34.99611,32.83099],[34.99586,32.83108],[34.9954,32.83025],[34.99534,32.8303],[34.99574,32.83112],[34.99549,32.83121],[34.99504,32.83037],[34.99497,32.83043],[34.99538,32.83124],[34.99513,32.83133],[34.99467,32.8305],[34.99461,32.83056],[34.99502,32.83137],[34.99494,32.8314],[34.99448,32.83057],[34.99366,32.83086],[34.99368,32.83098],[34.9936,32.83105],[34.99199,32.83173],[34.99212,32.83189],[34.99206,32.8325],[34.99196,32.83253],[34.99199,32.83272],[34.99667,32.83319],[34.99789,32.83324],[34.99986,32.83319],[35.00004,32.83322],[35.00017,32.83336],[35.00015,32.83352],[35.00005,32.83365],[34.99979,32.83366],[34.99948,32.83352],[34.99749,32.83351],[34.99616,32.83344],[34.99238,32.833],[34.99186,32.83303],[34.99082,32.83331],[34.99064,32.83317],[34.99061,32.83304],[34.99077,32.83283],[34.99116,32.83275],[34.99116,32.83265],[34.99105,32.83251],[34.99067,32.83221],[34.9904,32.83211],[34.98971,32.8321],[34.98908,32.83228],[34.98876,32.83244],[34.98841,32.83284],[34.98827,32.83317],[34.98836,32.83344],[34.9888,32.83329],[34.98889,32.83334],[34.98822,32.83361],[34.98758,32.83399],[34.98737,32.834],[34.98703,32.83427],[34.98648,32.83486],[34.98634,32.8351],[34.98633,32.83544],[34.98595,32.83568],[34.98543,32.83551],[34.98538,32.83558],[34.98545,32.83563],[34.98549,32.83581],[34.98506,32.8358],[34.98473,32.83587],[34.98362,32.83629],[34.98289,32.83647],[34.98113,32.83657],[34.98053,32.83643],[34.98002,32.8366],[34.97996,32.83653],[34.98,32.83641],[34.98029,32.836],[34.98,32.8358],[34.97961,32.8363],[34.97952,32.8363],[34.97948,32.83623],[34.97982,32.83585],[34.97983,32.83569],[34.97932,32.83538],[34.97887,32.83522],[34.97877,32.83538],[34.97865,32.83544],[34.97859,32.83531],[34.97841,32.8353],[34.97806,32.83533],[34.97772,32.83546],[34.97776,32.83582],[34.97802,32.83623],[34.97792,32.83626],[34.97759,32.83591],[34.97757,32.8354],[34.97763,32.83519],[34.97755,32.835],[34.97695,32.83461],[34.97708,32.83441],[34.97655,32.83418],[34.97663,32.83402],[34.97577,32.83366],[34.97549,32.83347],[34.97268,32.83243],[34.97248,32.83244],[34.97246,32.83262],[34.97237,32.83268],[34.97198,32.83261],[34.97191,32.83249],[34.97191,32.83234],[34.97199,32.83233],[34.9718,32.83218],[34.97021,32.83163],[34.96925,32.83144],[34.96867,32.83142],[34.96848,32.83149],[34.96839,32.83162],[34.96846,32.832],[34.96793,32.8317],[34.96764,32.83164],[34.96709,32.83168],[34.96583,32.83135],[34.96541,32.83117],[34.96478,32.83104],[34.96328,32.8304],[34.96175,32.82936],[34.96089,32.82832],[34.96052,32.82798],[34.96042,32.82774],[34.95863,32.82616],[34.95798,32.82601],[34.95777,32.8259],[34.95721,32.82585],[34.95692,32.82595],[34.95682,32.82606],[34.95691,32.82612],[34.95674,32.82631],[34.95657,32.8262],[34.95648,32.8263],[34.95607,32.82613],[34.95569,32.82584],[34.955,32.82566],[34.95481,32.82495],[34.95449,32.82434],[34.95453,32.82319],[34.95422,32.82231],[34.95425,32.82202],[34.95404,32.81806],[34.9543,32.8175],[34.95428,32.81461],[34.95434,32.81365],[34.95601,32.80813],[34.95595,32.80771],[34.95568,32.80707],[34.95516,32.80637],[34.95424,32.806],[34.9543,32.80537],[34.9545,32.80524],[34.95572,32.80484],[34.95613,32.80453],[34.95621,32.80354],[34.95642,32.80318],[34.95651,32.80286],[34.95638,32.80156],[34.9563,32.8014],[34.95622,32.80061],[34.95627,32.8005],[34.95618,32.79975],[34.95558,32.79668],[34.95494,32.79671],[34.95493,32.79662],[34.95571,32.79654],[34.95564,32.79569],[34.95564,32.7939],[34.95548,32.79221],[34.95525,32.79167],[34.95518,32.79133],[34.95527,32.79096],[34.95523,32.79032],[34.95506,32.78967],[34.9546,32.78638],[34.95432,32.78562],[34.95433,32.78427],[34.9542,32.78368],[34.95415,32.78265],[34.95369,32.77801],[34.95355,32.77759],[34.94827,32.73766],[34.94742,32.73286],[34.94662,32.72761],[34.94567,32.72319],[34.94467,32.71918],[34.94439,32.71736],[34.94269,32.71158],[34.94164,32.70983],[34.94042,32.70828],[34.93906,32.70686],[34.93796,32.70605],[34.93725,32.70602],[34.9365,32.70579],[34.93527,32.70572],[34.93484,32.70619],[34.93476,32.70606],[34.93376,32.70617],[34.93395,32.70666],[34.93381,32.70685],[34.93353,32.70666],[34.93343,32.70617],[34.93298,32.70611],[34.93263,32.70623],[34.93227,32.70618],[34.93225,32.70591],[34.93256,32.70563],[34.93235,32.70524],[34.93213,32.70517],[34.93199,32.70463],[34.93244,32.70457],[34.9332,32.7046],[34.93331,32.70483],[34.93362,32.70473],[34.93394,32.70474],[34.93439,32.7045],[34.93476,32.70439],[34.93537,32.70348],[34.9354,32.70224],[34.93437,32.69993],[34.93211,32.69864],[34.93142,32.69843],[34.93078,32.69841],[34.93014,32.6985],[34.9295,32.6988],[34.92914,32.6993],[34.92798,32.69937],[34.92808,32.69884],[34.92824,32.69865],[34.92863,32.69848],[34.92919,32.69833],[34.9297,32.69827],[34.92974,32.69817],[34.92969,32.69807],[34.92943,32.69799],[34.92881,32.69803],[34.92834,32.69819],[34.9279,32.69821],[34.9276,32.69811],[34.92737,32.69786],[34.92731,32.69758],[34.92765,32.69622],[34.92754,32.69611],[34.92715,32.69615],[34.92714,32.69566],[34.92768,32.6956],[34.92775,32.69543],[34.92768,32.69536],[34.92726,32.69529],[34.92712,32.69513],[34.92685,32.69435],[34.92686,32.69341],[34.92701,32.69294],[34.92666,32.69249],[34.92849,32.69074],[34.92788,32.69002],[34.92776,32.68951],[34.92801,32.68914],[34.92874,32.68935],[34.92905,32.68897],[34.92905,32.68859],[34.92888,32.68828],[34.9284,32.68793],[34.92815,32.68766],[34.92791,32.68774],[34.92787,32.68789],[34.92799,32.68799],[34.92787,32.68804],[34.92772,32.6879],[34.92773,32.6876],[34.92741,32.68749],[34.92731,32.68737],[34.92755,32.68731],[34.92768,32.6872],[34.92808,32.6872],[34.92819,32.68703],[34.92822,32.68682],[34.92814,32.68653],[34.92777,32.68618],[34.92743,32.68618],[34.92721,32.68645],[34.92694,32.68644],[34.92698,32.68614],[34.92693,32.68588],[34.92629,32.68568],[34.92623,32.6855],[34.92642,32.68495],[34.92667,32.68512],[34.92716,32.68496],[34.92724,32.68485],[34.92708,32.68467],[34.92706,32.68449],[34.92731,32.68453],[34.92759,32.68467],[34.92775,32.68465],[34.92791,32.68437],[34.92765,32.68431],[34.9276,32.68422],[34.92786,32.68398],[34.92811,32.68385],[34.928,32.68314],[34.92769,32.68278],[34.9272,32.68299],[34.92693,32.68298],[34.92677,32.68306],[34.92664,32.68297],[34.92673,32.68229],[34.92687,32.68216],[34.92711,32.68213],[34.92724,32.68201],[34.9273,32.68184],[34.92747,32.68179],[34.92759,32.68167],[34.92758,32.68148],[34.92742,32.68131],[34.92678,32.68125],[34.92645,32.68113],[34.92634,32.68098],[34.92632,32.68076],[34.92641,32.68061],[34.92669,32.68054],[34.92685,32.6806],[34.92689,32.68036],[34.92682,32.68021],[34.92668,32.68024],[34.9264,32.6805],[34.92621,32.68055],[34.92619,32.68047],[34.92632,32.68037],[34.92631,32.6802],[34.92644,32.68013],[34.92644,32.67998],[34.92633,32.67989],[34.9261,32.67992],[34.92591,32.67983],[34.92631,32.67941],[34.92609,32.67894],[34.92681,32.67866],[34.92726,32.67907],[34.92762,32.67928],[34.92844,32.67876],[34.92889,32.67787],[34.92905,32.67703],[34.9289,32.67644],[34.92914,32.67499],[34.92911,32.67462],[34.92892,32.6743],[34.92922,32.67407],[34.92843,32.67069],[34.92812,32.67005],[34.92777,32.66983],[34.92755,32.66938],[34.92767,32.66916],[34.92802,32.66899],[34.92777,32.66572],[34.92763,32.66549],[34.92692,32.66559],[34.92666,32.66537],[34.92683,32.66505],[34.92753,32.66493],[34.92744,32.66466],[34.92713,32.66234],[34.92673,32.66195],[34.92666,32.66138],[34.92627,32.6608],[34.92539,32.66102],[34.92468,32.66086],[34.92417,32.66092],[34.92439,32.66043],[34.92497,32.66043],[34.92558,32.65981],[34.92591,32.65968],[34.92655,32.65954],[34.92687,32.659],[34.92699,32.65832],[34.92561,32.65008],[34.92458,32.64878],[34.92479,32.64816],[34.9245,32.6476],[34.92282,32.64771],[34.92224,32.64734],[34.92212,32.64683],[34.92275,32.64673],[34.92247,32.64621],[34.92202,32.64593],[34.92206,32.64535],[34.92363,32.64519],[34.92422,32.64478],[34.92343,32.64445],[34.9234,32.64418],[34.92377,32.64383],[34.92365,32.64352],[34.92305,32.64335],[34.92224,32.64376],[34.92192,32.64364],[34.92174,32.64277],[34.92103,32.64258],[34.92097,32.64231],[34.92232,32.64093],[34.9229,32.64109],[34.92304,32.64079],[34.9227,32.64063],[34.92269,32.64031],[34.92309,32.63963],[34.92345,32.63877],[34.92297,32.63867],[34.92269,32.63851],[34.92289,32.63806],[34.92235,32.63799],[34.92184,32.63708],[34.92116,32.63704],[34.92076,32.63683],[34.92078,32.63648],[34.92113,32.63647],[34.92136,32.63631],[34.92152,32.63577],[34.92177,32.63547],[34.92217,32.63524],[34.92179,32.63494],[34.92137,32.63476],[34.92124,32.63438],[34.92154,32.6339],[34.92159,32.63342],[34.92129,32.63291],[34.92139,32.63242],[34.92142,32.63172],[34.92107,32.63154],[34.92062,32.63118],[34.92037,32.63058],[34.92008,32.6305],[34.91981,32.6306],[34.92003,32.6304],[34.91981,32.63017],[34.91933,32.63003],[34.91915,32.62991],[34.91915,32.62978],[34.91929,32.62962],[34.91951,32.6295],[34.91972,32.62948],[34.91984,32.62957],[34.91998,32.62995],[34.9201,32.63003],[34.92052,32.62997],[34.92074,32.6297],[34.92084,32.62944],[34.92081,32.62909],[34.92068,32.62899],[34.91996,32.62914],[34.91955,32.62916],[34.91899,32.62885],[34.91885,32.62867],[34.9189,32.62854],[34.91897,32.62852],[34.91926,32.62864],[34.9194,32.62878],[34.91962,32.62877],[34.91977,32.62858],[34.91953,32.62836],[34.91955,32.6283],[34.91963,32.62819],[34.9199,32.6281],[34.92,32.62794],[34.91965,32.62764],[34.91985,32.62716],[34.91945,32.62701],[34.91942,32.62642],[34.91918,32.62624],[34.91895,32.62618],[34.91864,32.62628],[34.91854,32.62615],[34.91891,32.62521],[34.91921,32.6253],[34.91933,32.62526],[34.91949,32.62516],[34.91945,32.62506],[34.91908,32.62504],[34.91841,32.6248],[34.9183,32.6247],[34.91835,32.62445],[34.91842,32.62439],[34.91861,32.62445],[34.91925,32.62438],[34.91964,32.62425],[34.91983,32.62397],[34.91982,32.62362],[34.91947,32.62359],[34.91905,32.6232],[34.91878,32.62317],[34.91887,32.62299],[34.91954,32.62312],[34.91991,32.62301],[34.92021,32.62281],[34.9204,32.62244],[34.92037,32.62221],[34.91996,32.62173],[34.91925,32.62133],[34.91863,32.62128],[34.91853,32.62092],[34.91833,32.6207],[34.918,32.62052],[34.91709,32.6205],[34.91729,32.62064],[34.9174,32.62082],[34.91731,32.62111],[34.91703,32.62114],[34.91678,32.62107],[34.91624,32.61972],[34.91627,32.61953],[34.91686,32.61911],[34.91694,32.61888],[34.91663,32.61831],[34.916,32.61815],[34.91575,32.61773],[34.91557,32.61755],[34.91591,32.61703],[34.91577,32.61675],[34.91496,32.61671],[34.91499,32.61626],[34.91546,32.61605],[34.91541,32.61552],[34.91576,32.61555],[34.91605,32.61592],[34.91729,32.61589],[34.91763,32.61505],[34.91763,32.61463],[34.91735,32.61414],[34.91712,32.61389],[34.91654,32.61358],[34.91604,32.6136],[34.91579,32.61435],[34.91487,32.61434],[34.91465,32.61348],[34.91416,32.61361],[34.91406,32.61325],[34.91444,32.61297],[34.91428,32.6127],[34.91455,32.61251],[34.91513,32.61257],[34.9154,32.61267],[34.91631,32.61249],[34.91629,32.61184],[34.91598,32.6113],[34.91639,32.60979],[34.91598,32.60924],[34.91585,32.60878],[34.91585,32.60844],[34.91601,32.60824],[34.91652,32.608],[34.91689,32.60766],[34.9171,32.60689],[34.91698,32.60551],[34.91702,32.60412],[34.91676,32.60311],[34.9161,32.6013],[34.916,32.6005],[34.9164,32.59977],[34.91635,32.5991],[34.91599,32.59783],[34.91595,32.59729],[34.91572,32.59715],[34.91478,32.59029],[34.91433,32.5888],[34.91409,32.5863],[34.91309,32.58255],[34.91287,32.58002],[34.91118,32.57256],[34.90882,32.56162],[34.90848,32.5604],[34.9078,32.55894],[34.90754,32.55769],[34.90659,32.55685],[34.90559,32.55577],[34.90549,32.55534],[34.90507,32.55479],[34.90494,32.55441],[34.90504,32.55371],[34.90526,32.55309],[34.9054,32.55147],[34.90529,32.54941],[34.9049,32.54732],[34.90468,32.5467],[34.90424,32.54415],[34.90407,32.54396],[34.9039,32.54313],[34.90369,32.54267],[34.90323,32.54115],[34.90258,32.54008],[34.90213,32.53966],[34.90189,32.53973],[34.90107,32.53949],[34.90096,32.53935],[34.9009,32.53912],[34.90072,32.53909],[34.90069,32.53896],[34.90092,32.53885],[34.90173,32.53747],[34.9017,32.53723],[34.90116,32.53675],[34.90148,32.53578],[34.9014,32.53495],[34.90105,32.53355],[34.90046,32.53229],[34.90013,32.52852],[34.89967,32.52778],[34.89929,32.52761],[34.89941,32.5272],[34.8995,32.52642],[34.89938,32.52576],[34.89888,32.52512],[34.89834,32.52471],[34.89854,32.52446],[34.89867,32.52408],[34.89864,32.52319],[34.89807,32.52266],[34.89803,32.52248],[34.89809,32.52221],[34.89792,32.52149],[34.8981,32.52117],[34.89797,32.52027],[34.89804,32.51987],[34.89783,32.51821],[34.89763,32.51787],[34.89767,32.51756],[34.89762,32.51727],[34.897,32.5163],[34.89714,32.51572],[34.89699,32.51516],[34.89671,32.51465],[34.89625,32.51435],[34.89617,32.51389],[34.896,32.51373],[34.8958,32.51368],[34.89552,32.51374],[34.89543,32.51342],[34.89571,32.51318],[34.89557,32.51253],[34.89581,32.51227],[34.89609,32.51175],[34.89584,32.51058],[34.89557,32.51026],[34.89545,32.50973],[34.89522,32.5095],[34.89523,32.50928],[34.89511,32.50896],[34.89375,32.50715],[34.89356,32.50709],[34.89328,32.50679],[34.89291,32.50676],[34.89266,32.50659],[34.89254,32.50632],[34.89198,32.50629],[34.89175,32.50617],[34.89174,32.50583],[34.89156,32.50523],[34.89137,32.5051],[34.89089,32.50513],[34.89076,32.50502],[34.89076,32.50478],[34.89109,32.50457],[34.89109,32.50436],[34.891,32.50414],[34.89051,32.50409],[34.89028,32.50416],[34.88989,32.50399],[34.8896,32.504],[34.88959,32.50383],[34.88937,32.50379],[34.88955,32.50365],[34.8898,32.50313],[34.89041,32.50331],[34.89074,32.50279],[34.89107,32.50249],[34.89068,32.50187],[34.89058,32.5018],[34.8904,32.502],[34.8904,32.5019],[34.89032,32.50186],[34.89022,32.50189],[34.89019,32.50197],[34.89031,32.50207],[34.89027,32.50211],[34.89006,32.50197],[34.88997,32.50198],[34.88999,32.50208],[34.88983,32.50203],[34.88975,32.50211],[34.88971,32.50206],[34.88895,32.50232],[34.88893,32.50285],[34.8888,32.50291],[34.88879,32.50197],[34.88929,32.5018],[34.8894,32.50166],[34.89041,32.50115],[34.89048,32.50089],[34.89053,32.50009],[34.88999,32.49811],[34.88977,32.49783],[34.8895,32.49761],[34.88924,32.49768],[34.88912,32.49781],[34.88901,32.49778],[34.88879,32.49785],[34.88858,32.49771],[34.88872,32.49758],[34.88896,32.49761],[34.88888,32.49747],[34.88845,32.49741],[34.88828,32.49759],[34.88795,32.49708],[34.88852,32.49673],[34.88875,32.49682],[34.88934,32.49677],[34.88942,32.49686],[34.88953,32.49672],[34.88956,32.49629],[34.88949,32.4959],[34.8894,32.49576],[34.88939,32.49547],[34.88984,32.49489],[34.88988,32.49404],[34.88963,32.49377],[34.88918,32.49347],[34.88885,32.49352],[34.88849,32.4941],[34.88862,32.4942],[34.88882,32.49419],[34.88883,32.49425],[34.88862,32.49435],[34.88842,32.49422],[34.88803,32.49421],[34.88764,32.49437],[34.88723,32.49433],[34.88689,32.49416],[34.88688,32.49394],[34.88718,32.49373],[34.88733,32.4937],[34.88753,32.49377],[34.88765,32.49368],[34.88801,32.49363],[34.888,32.4935],[34.88816,32.49348],[34.88821,32.49361],[34.88832,32.49352],[34.88826,32.49336],[34.88837,32.49314],[34.88816,32.49317],[34.88777,32.49288],[34.88723,32.49269],[34.88695,32.49265],[34.88672,32.49237],[34.88679,32.49223],[34.88724,32.49227],[34.88754,32.49254],[34.88801,32.49268],[34.88829,32.49289],[34.88857,32.49194],[34.88853,32.49151],[34.88816,32.49059],[34.88864,32.48944],[34.8888,32.48825],[34.8887,32.48711],[34.88812,32.48399],[34.88705,32.48098],[34.88687,32.47998],[34.88563,32.47699],[34.88418,32.47307],[34.8822,32.47352],[34.88136,32.47339],[34.88114,32.4732],[34.88119,32.47304],[34.88134,32.47301],[34.88175,32.47313],[34.88203,32.47315],[34.88225,32.473],[34.8821,32.47228],[34.88218,32.47221],[34.88245,32.47222],[34.88257,32.47231],[34.88273,32.47228],[34.88284,32.4728],[34.88524,32.47234],[34.88497,32.47133],[34.88506,32.47124],[34.88506,32.47111],[34.88494,32.47097],[34.8849,32.47068],[34.88445,32.46963],[34.88436,32.46886],[34.88422,32.46851],[34.88383,32.46812],[34.8837,32.4679],[34.88332,32.46768],[34.88299,32.46763],[34.88114,32.46802],[34.8809,32.4684],[34.87968,32.47329],[34.87974,32.47348],[34.8797,32.47365],[34.87942,32.47371],[34.87926,32.47364],[34.8792,32.47348],[34.87932,32.47257],[34.87946,32.47223],[34.88044,32.46845],[34.88067,32.46787],[34.8813,32.46717],[34.88193,32.46676],[34.88235,32.4666],[34.88346,32.46632],[34.88359,32.46536],[34.88366,32.4652],[34.88395,32.46519],[34.88392,32.46495],[34.88367,32.4641],[34.88317,32.46328],[34.87978,32.45258],[34.87997,32.45224],[34.87968,32.45184],[34.87973,32.45144],[34.87933,32.4508],[34.87898,32.45067],[34.87893,32.44967],[34.87923,32.44958],[34.87931,32.44932],[34.87924,32.44897],[34.87894,32.44885],[34.87837,32.44917],[34.87832,32.44904],[34.87884,32.44864],[34.87857,32.44772],[34.87802,32.44711],[34.87813,32.44678],[34.87788,32.44639],[34.87777,32.4461],[34.87817,32.4455],[34.87837,32.44499],[34.87835,32.44466],[34.87854,32.44445],[34.87853,32.44423],[34.87781,32.44375],[34.87762,32.44348],[34.87777,32.44314],[34.87776,32.44282],[34.87758,32.44264],[34.8771,32.44258],[34.87674,32.44212],[34.87674,32.44115],[34.87716,32.4412],[34.87753,32.44113],[34.87765,32.44074],[34.87711,32.43826],[34.87634,32.43535],[34.876,32.43474],[34.87552,32.43443],[34.87552,32.43395],[34.87526,32.43333],[34.87495,32.43291],[34.87516,32.43248],[34.87488,32.4323],[34.87521,32.43201],[34.87541,32.43165],[34.87528,32.431],[34.87458,32.43132],[34.87435,32.43133],[34.87415,32.43123],[34.87444,32.43068],[34.87447,32.43042],[34.87422,32.43016],[34.87443,32.42974],[34.87428,32.42962],[34.8742,32.42932],[34.87446,32.42923],[34.87443,32.42914],[34.874,32.42871],[34.87412,32.42837],[34.87441,32.42824],[34.87438,32.42798],[34.87411,32.42696],[34.8738,32.42626],[34.87334,32.42619],[34.87327,32.42597],[34.87365,32.42568],[34.87328,32.42373],[34.87262,32.42205],[34.87223,32.41838],[34.8712,32.4165],[34.87072,32.41369],[34.87034,32.41258],[34.86879,32.41016],[34.86843,32.40944],[34.86818,32.40916],[34.86821,32.40903],[34.86808,32.40857],[34.86807,32.4081],[34.86779,32.40771],[34.86764,32.4066],[34.86724,32.40621],[34.86719,32.4053],[34.86704,32.40494],[34.8667,32.40464],[34.86673,32.40442],[34.86641,32.40435],[34.86639,32.40414],[34.86629,32.40396],[34.86614,32.40388],[34.86645,32.40383],[34.86642,32.40374],[34.86629,32.4037],[34.86639,32.40354],[34.86584,32.40319],[34.86649,32.40354],[34.86687,32.40338],[34.86685,32.40328],[34.867,32.40302],[34.86697,32.40279],[34.86652,32.40262],[34.86609,32.4026],[34.86601,32.40253],[34.86611,32.40247],[34.86657,32.40253],[34.86692,32.40265],[34.86693,32.40247],[34.86661,32.40226],[34.86626,32.40167],[34.86616,32.40164],[34.86569,32.40181],[34.86556,32.40204],[34.86558,32.40232],[34.86572,32.40282],[34.86566,32.40283],[34.86545,32.40231],[34.86541,32.40196],[34.8651,32.40176],[34.86517,32.40162],[34.86539,32.40159],[34.86536,32.40146],[34.86544,32.40123],[34.86529,32.401],[34.86535,32.40086],[34.86571,32.40078],[34.86592,32.40026],[34.86604,32.39973],[34.86612,32.39852],[34.86609,32.39804],[34.8656,32.39592],[34.86537,32.39558],[34.86497,32.39302],[34.86478,32.39228],[34.86299,32.38725],[34.86221,32.38388],[34.86057,32.37867],[34.85918,32.37185],[34.85714,32.36562],[34.85366,32.35106],[34.84844,32.33091],[34.84801,32.33062],[34.84769,32.3305],[34.84722,32.33039],[34.84686,32.33044],[34.84682,32.33035],[34.84738,32.33011],[34.84791,32.32963],[34.84804,32.32944],[34.84814,32.32901],[34.84807,32.32852],[34.84769,32.32799],[34.84706,32.3276],[34.84659,32.32744],[34.84577,32.32741],[34.84572,32.3272],[34.84612,32.32715],[34.84638,32.32702],[34.84684,32.32666],[34.84724,32.32618],[34.84058,32.30037],[34.84009,32.29906],[34.83975,32.29835],[34.83968,32.29812],[34.83971,32.29776],[34.8395,32.29713],[34.83935,32.29694],[34.83895,32.29567],[34.83901,32.2953],[34.83859,32.2943],[34.83842,32.29415],[34.83829,32.29371],[34.83834,32.29357],[34.83778,32.29187],[34.83769,32.29126],[34.83727,32.28996],[34.8371,32.28962],[34.83708,32.28916],[34.83693,32.28862],[34.83659,32.28797],[34.83655,32.28758],[34.83587,32.28497],[34.83589,32.28471],[34.83581,32.28441],[34.83561,32.28413],[34.83505,32.28199],[34.83486,32.28175],[34.83465,32.28111],[34.83452,32.2803],[34.83422,32.27978],[34.8341,32.27914],[34.83412,32.27884],[34.83298,32.27522],[34.83269,32.27329],[34.83063,32.26555],[34.83028,32.26457],[34.82938,32.26127],[34.82726,32.25527],[34.82695,32.25354],[34.82674,32.25316],[34.82662,32.25215],[34.82642,32.25189],[34.82634,32.25166],[34.82602,32.25027],[34.82554,32.24901],[34.82535,32.24827],[34.82506,32.24759],[34.8249,32.24653],[34.82464,32.24587],[34.82438,32.24477],[34.82421,32.24439],[34.82388,32.24309],[34.82303,32.24091],[34.8226,32.23932],[34.82202,32.23788],[34.82187,32.23763],[34.82119,32.23534],[34.82119,32.23499],[34.82104,32.23467],[34.82077,32.23444],[34.8208,32.23418],[34.82074,32.23408],[34.82081,32.23384],[34.82076,32.23346],[34.81957,32.23057],[34.81937,32.23022],[34.81931,32.22949],[34.81919,32.22895],[34.81903,32.22845],[34.81874,32.22795],[34.81747,32.22392],[34.81694,32.22269],[34.81694,32.22234],[34.81678,32.22188],[34.81651,32.22118],[34.81635,32.22098],[34.81609,32.2202],[34.81535,32.21873],[34.81539,32.21851],[34.8153,32.21823],[34.81477,32.21728],[34.81472,32.21697],[34.81446,32.21652],[34.81442,32.21603],[34.81403,32.21519],[34.81399,32.21467],[34.8123,32.21014],[34.81094,32.20715],[34.80917,32.20176],[34.80852,32.20071],[34.80828,32.19999],[34.80801,32.19966],[34.80788,32.19916],[34.80751,32.19848],[34.80743,32.19743],[34.80708,32.19655],[34.80617,32.19573],[34.80604,32.19548],[34.80571,32.19402],[34.80556,32.1937],[34.80551,32.19297],[34.80494,32.19146],[34.80486,32.19067],[34.80408,32.18711],[34.80333,32.18441],[34.80261,32.18207],[34.80144,32.17752],[34.80074,32.17537],[34.80022,32.1733],[34.79969,32.17247],[34.79937,32.17173],[34.79874,32.17095],[34.7983,32.17055],[34.79827,32.16992],[34.79792,32.16955],[34.79743,32.16922],[34.79743,32.16914],[34.79776,32.16865],[34.79785,32.16839],[34.79778,32.16795],[34.79746,32.16766],[34.79687,32.16744],[34.79655,32.1674],[34.79651,32.16734],[34.79652,32.16727],[34.79706,32.16677],[34.79715,32.16657],[34.79719,32.16603],[34.79702,32.16536],[34.79609,32.16475],[34.7953,32.16486],[34.79473,32.16482],[34.79376,32.16461],[34.79329,32.1647],[34.79319,32.16467],[34.79321,32.16457],[34.79383,32.16445],[34.79419,32.16454],[34.79421,32.1644],[34.79446,32.16449],[34.79448,32.16445],[34.79432,32.16438],[34.79467,32.16386],[34.79501,32.16403],[34.79528,32.16366],[34.79548,32.16377],[34.79584,32.16319],[34.79628,32.16265],[34.79605,32.16253],[34.79618,32.16233],[34.79491,32.1617],[34.79444,32.16019],[34.79451,32.16011],[34.79505,32.15999],[34.79491,32.15953],[34.7948,32.15939],[34.79462,32.15928],[34.79438,32.15928],[34.79385,32.1594],[34.79457,32.1617],[34.79453,32.16178],[34.79447,32.16175],[34.79378,32.16276],[34.79387,32.16283],[34.79388,32.16295],[34.79362,32.16305],[34.79356,32.16288],[34.79359,32.16281],[34.79256,32.1595],[34.79258,32.15931],[34.7927,32.15916],[34.79312,32.15904],[34.79302,32.15871],[34.79319,32.15867],[34.79318,32.15862],[34.793,32.15866],[34.79298,32.15858],[34.79309,32.15856],[34.79305,32.15845],[34.79234,32.15865],[34.79189,32.15898],[34.79168,32.15933],[34.79156,32.16011],[34.79276,32.16564],[34.79283,32.16573],[34.79276,32.16586],[34.7926,32.16586],[34.79132,32.16016],[34.79136,32.15963],[34.79148,32.15918],[34.792,32.1586],[34.79278,32.15828],[34.79463,32.15784],[34.79468,32.15636],[34.79386,32.15299],[34.78965,32.14033],[34.78685,32.13319],[34.78397,32.1249],[34.78309,32.12257],[34.78273,32.1221],[34.78245,32.12194],[34.7821,32.12184],[34.78181,32.12185],[34.78151,32.122],[34.78177,32.12232],[34.78176,32.1224],[34.78163,32.12241],[34.78077,32.12101],[34.78072,32.12073],[34.78078,32.12064],[34.78088,32.12068],[34.78087,32.12089],[34.78096,32.12108],[34.78129,32.12104],[34.78153,32.12087],[34.78185,32.12041],[34.78188,32.11997],[34.78176,32.11945],[34.78167,32.11933],[34.78164,32.11898],[34.78138,32.11848],[34.78121,32.11835],[34.78124,32.11818],[34.78115,32.11788],[34.78095,32.11764],[34.78079,32.11759],[34.78081,32.11741],[34.78045,32.11648],[34.78034,32.11593],[34.78016,32.11581],[34.78023,32.11565],[34.78019,32.11532],[34.78014,32.11517],[34.77993,32.11496],[34.77989,32.11429],[34.77978,32.11399],[34.77943,32.11356],[34.77931,32.1133],[34.77934,32.11286],[34.77927,32.11263],[34.77904,32.11226],[34.77879,32.11167],[34.77814,32.11125],[34.77806,32.11104],[34.77778,32.11073],[34.77785,32.11025],[34.77758,32.10982],[34.77735,32.1091],[34.77645,32.10899],[34.77476,32.10839],[34.77457,32.10846],[34.77444,32.10835],[34.77446,32.10816],[34.77458,32.10808],[34.77478,32.10808],[34.77578,32.1085],[34.77668,32.10753],[34.77661,32.10738],[34.77648,32.10739],[34.77633,32.1072],[34.77593,32.10726],[34.7751,32.10708],[34.77508,32.10696],[34.77587,32.10709],[34.77627,32.10705],[34.77637,32.10699],[34.77648,32.10674],[34.77657,32.10668],[34.77648,32.10641],[34.7766,32.10635],[34.77703,32.10638],[34.77753,32.10663],[34.77767,32.10657],[34.77768,32.10652],[34.77748,32.10627],[34.77738,32.1058],[34.77743,32.10576],[34.77732,32.10563],[34.77738,32.10556],[34.77727,32.10547],[34.77716,32.10516],[34.7772,32.10503],[34.77708,32.10496],[34.77688,32.10504],[34.77671,32.10529],[34.77675,32.10553],[34.7767,32.10567],[34.77651,32.10585],[34.77633,32.1059],[34.77628,32.10585],[34.77585,32.10592],[34.77586,32.10582],[34.77621,32.10571],[34.77618,32.10562],[34.77591,32.1053],[34.77554,32.10526],[34.77499,32.10593],[34.77506,32.10613],[34.77499,32.10619],[34.77481,32.10618],[34.77469,32.10627],[34.77369,32.1075],[34.77366,32.10776],[34.77343,32.10783],[34.77331,32.10809],[34.77335,32.10837],[34.77346,32.10868],[34.77373,32.10909],[34.7736,32.10923],[34.77337,32.10921],[34.7733,32.10914],[34.77307,32.10829],[34.77309,32.10796],[34.77325,32.10761],[34.77605,32.10446],[34.77585,32.10252],[34.7758,32.10241],[34.77568,32.10243],[34.77555,32.10235],[34.77497,32.10145],[34.77485,32.10142],[34.77464,32.10097],[34.77282,32.09882],[34.77233,32.09895],[34.77236,32.09889],[34.7728,32.09879],[34.77371,32.09866],[34.7732,32.0967],[34.77256,32.09682],[34.77294,32.09812],[34.77265,32.09842],[34.77188,32.09864],[34.77263,32.09838],[34.77276,32.09824],[34.77278,32.09812],[34.77207,32.0955],[34.7719,32.09507],[34.77207,32.09499],[34.77197,32.09478],[34.77156,32.0945],[34.7705,32.0942],[34.76958,32.09441],[34.76932,32.09368],[34.76986,32.09347],[34.77019,32.09323],[34.77056,32.09266],[34.77067,32.09218],[34.77061,32.09174],[34.77018,32.0911],[34.76976,32.09081],[34.76917,32.09063],[34.76874,32.09063],[34.76821,32.09084],[34.76803,32.09043],[34.76877,32.09035],[34.76931,32.09001],[34.76951,32.08969],[34.76962,32.08879],[34.76934,32.08771],[34.76903,32.08715],[34.76737,32.08733],[34.76722,32.08741],[34.76708,32.08734],[34.76716,32.08721],[34.76824,32.08711],[34.76784,32.08549],[34.76753,32.08512],[34.76695,32.08537],[34.76665,32.0856],[34.76651,32.08578],[34.7664,32.08612],[34.76639,32.0864],[34.76671,32.08772],[34.76681,32.08784],[34.76682,32.08794],[34.76668,32.08797],[34.76648,32.08771],[34.76622,32.0866],[34.76619,32.08614],[34.76642,32.08555],[34.76652,32.0854],[34.76691,32.08518],[34.76802,32.08477],[34.76755,32.08402],[34.76704,32.08378],[34.76658,32.08375],[34.76695,32.08353],[34.76713,32.08323],[34.76711,32.0827],[34.76691,32.08231],[34.76656,32.08188],[34.76637,32.08176],[34.76634,32.08148],[34.76655,32.08106],[34.76634,32.08023],[34.76564,32.07915],[34.76559,32.07841],[34.76538,32.07804],[34.76476,32.07754],[34.76462,32.07757],[34.76461,32.07746],[34.7648,32.07739],[34.76502,32.0772],[34.76514,32.07682],[34.76512,32.07631],[34.76492,32.07589],[34.76445,32.07531],[34.76405,32.07511],[34.76398,32.07472],[34.76403,32.07414],[34.76363,32.07335],[34.76327,32.07312],[34.76347,32.0728],[34.76323,32.07183],[34.76287,32.0709],[34.76286,32.06991],[34.76262,32.06934],[34.76243,32.06914],[34.76168,32.06874],[34.76121,32.06863],[34.76141,32.06827],[34.76106,32.06718],[34.76101,32.06665],[34.76072,32.066],[34.76037,32.06463],[34.76001,32.06422],[34.75945,32.06301],[34.75981,32.06221],[34.75823,32.05998],[34.75823,32.05972],[34.75812,32.05946],[34.7573,32.05805],[34.7562,32.05691],[34.75442,32.05566],[34.75386,32.0558],[34.75318,32.05578],[34.75164,32.05533],[34.75116,32.05507],[34.75073,32.05462],[34.75075,32.05453],[34.75038,32.05409],[34.74985,32.05366],[34.74967,32.05329],[34.74954,32.05184],[34.74943,32.05165],[34.74852,32.05165],[34.74845,32.0513],[34.74844,32.05165],[34.74837,32.05165],[34.74842,32.05226],[34.74975,32.05459],[34.75021,32.05571],[34.75006,32.05576],[34.7496,32.05474],[34.7482,32.05227],[34.7481,32.05157],[34.7483,32.05139],[34.74828,32.05053],[34.74692,32.04835],[34.74566,32.04802],[34.74521,32.04749],[34.74508,32.04721],[34.74511,32.04707],[34.74503,32.0469],[34.74503,32.04681],[34.74514,32.04673],[34.74512,32.04615],[34.74461,32.04529],[34.74425,32.04507],[34.74421,32.04491],[34.74431,32.04486],[34.7444,32.04497],[34.7445,32.04498],[34.74481,32.04485],[34.74515,32.04461],[34.74535,32.04437],[34.74563,32.04428],[34.74578,32.04431],[34.74592,32.04394],[34.74593,32.04365],[34.74583,32.04333],[34.74548,32.04294],[34.7454,32.04254],[34.74548,32.04246],[34.74498,32.0418],[34.74499,32.04159],[34.74526,32.041],[34.74513,32.04079],[34.74465,32.03937],[34.74494,32.03905],[34.74511,32.03869],[34.74519,32.03822],[34.74505,32.03794],[34.74426,32.03693],[34.74428,32.03646],[34.74399,32.03584],[34.74353,32.03518],[34.74328,32.03498],[34.743,32.03455],[34.74278,32.03436],[34.74274,32.03388],[34.74242,32.03333],[34.74244,32.03314],[34.74232,32.0328],[34.74232,32.03255],[34.74197,32.03174],[34.74136,32.03082],[34.7408,32.03028],[34.74067,32.03027],[34.74083,32.02918],[34.7405,32.02821],[34.74034,32.02747],[34.73964,32.02636],[34.73941,32.02585],[34.73925,32.02526],[34.73935,32.02486],[34.73868,32.0233],[34.73872,32.02291],[34.73863,32.02221],[34.7385,32.02196],[34.73822,32.02177],[34.73843,32.02161],[34.73866,32.02087],[34.73865,32.02033],[34.73853,32.01951],[34.73828,32.01875],[34.73795,32.01809],[34.73762,32.01709],[34.73737,32.0158],[34.73725,32.01547],[34.73704,32.01531],[34.73705,32.01511],[34.73682,32.01452],[34.73667,32.01379],[34.73637,32.01307],[34.73574,32.01093],[34.73483,32.0089],[34.73469,32.0083],[34.73445,32.00786],[34.73356,32.00538],[34.73323,32.00473],[34.73319,32.00424],[34.73292,32.00366],[34.73269,32.00277],[34.73216,32.00193],[34.73221,32.00152],[34.732,32.00088],[34.73164,32.00055],[34.73139,31.99935],[34.73093,31.998],[34.73056,31.99733],[34.73045,31.99678],[34.73001,31.9958],[34.72718,31.98829],[34.70798,31.94252],[34.70448,31.93576],[34.7041,31.93517],[34.70267,31.93417],[34.70217,31.93361],[34.70212,31.9334],[34.70166,31.93289],[34.70052,31.9324],[34.69813,31.92975],[34.69831,31.92859],[34.69676,31.92699],[34.69573,31.9248],[34.69384,31.9229],[34.69319,31.92302],[34.69307,31.92296],[34.69293,31.92262],[34.69325,31.92249],[34.69308,31.9219],[34.69303,31.9213],[34.68285,31.89936],[34.67643,31.88602],[34.67323,31.87903],[34.6623,31.85675],[34.65981,31.85226],[34.65836,31.84906],[34.65797,31.84847],[34.65732,31.84823],[34.65721,31.8481],[34.65565,31.84832],[34.65431,31.84841],[34.64404,31.8485],[34.64337,31.84838],[34.64312,31.84823],[34.64271,31.84779],[34.64252,31.84722],[34.64255,31.84276],[34.65101,31.84278],[34.65098,31.84468],[34.65192,31.84549],[34.65623,31.84552],[34.65631,31.84542],[34.65621,31.84521],[34.65609,31.84524],[34.65602,31.84497],[34.65587,31.84476],[34.65526,31.84472],[34.65497,31.84462],[34.65476,31.84449],[34.65386,31.84355],[34.6536,31.84339],[34.65317,31.84324],[34.65315,31.84314],[34.65322,31.84303],[34.65345,31.84304],[34.6538,31.8432],[34.65415,31.84347],[34.65502,31.84445],[34.65564,31.84431],[34.65494,31.8431],[34.65432,31.84185],[34.65352,31.84137],[34.65275,31.84141],[34.65269,31.84136],[34.65271,31.8411],[34.65296,31.84118],[34.65354,31.84117],[34.65369,31.84084],[34.65369,31.84061],[34.65336,31.84013],[34.65349,31.84007],[34.65325,31.83975],[34.65368,31.83957],[34.65366,31.8395],[34.65322,31.83966],[34.65314,31.83961],[34.65309,31.83945],[34.65352,31.83928],[34.65346,31.83919],[34.65304,31.83934],[34.65292,31.83928],[34.65285,31.83893],[34.65267,31.83869],[34.65249,31.83875],[34.65234,31.8389],[34.65215,31.83916],[34.65204,31.83954],[34.65214,31.84136],[34.65225,31.84149],[34.65234,31.84365],[34.65243,31.84372],[34.6525,31.84396],[34.65245,31.84407],[34.65232,31.8441],[34.65212,31.84406],[34.65199,31.8439],[34.65178,31.83941],[34.652,31.8389],[34.65223,31.8387],[34.6523,31.83852],[34.65251,31.83837],[34.65237,31.83827],[34.6524,31.83815],[34.65224,31.83811],[34.65211,31.83799],[34.65203,31.83778],[34.65188,31.83773],[34.65092,31.83858],[34.65052,31.83867],[34.65052,31.83881],[34.64679,31.83879],[34.64679,31.83857],[34.64629,31.83857],[34.64629,31.83861],[34.64604,31.83846],[34.64502,31.83659],[34.64499,31.83637],[34.64431,31.83623],[34.6443,31.83667],[34.64422,31.83668],[34.64422,31.83608],[34.64394,31.83606],[34.64395,31.83417],[34.65031,31.83423],[34.6503,31.83197],[34.64135,31.83196],[34.64119,31.83144],[34.6408,31.83155],[34.64033,31.83157],[34.63982,31.83144],[34.63973,31.83115],[34.64001,31.83095],[34.64027,31.83132],[34.64055,31.83134],[34.64181,31.83093],[34.64165,31.83047],[34.64071,31.83084],[34.64054,31.83058],[34.64788,31.8275],[34.64721,31.82633],[34.64127,31.82877],[34.64113,31.8269],[34.64572,31.82502],[34.64499,31.82382],[34.64046,31.82569],[34.63996,31.82482],[34.64317,31.82201],[34.6431,31.82191],[34.64397,31.82119],[34.643,31.82034],[34.64114,31.822],[34.64095,31.82185],[34.64283,31.82021],[34.64047,31.81836],[34.63968,31.81884],[34.63946,31.81858],[34.63837,31.81931],[34.63714,31.82042],[34.63691,31.8209],[34.63693,31.82101],[34.63576,31.82348],[34.6355,31.8234],[34.6353,31.82346],[34.63498,31.82457],[34.63483,31.82542],[34.6348,31.82631],[34.63487,31.82727],[34.63498,31.82797],[34.63525,31.82888],[34.63559,31.82975],[34.63759,31.83397],[34.63782,31.83397],[34.63801,31.8341],[34.63806,31.83427],[34.63792,31.83448],[34.6376,31.83462],[34.63714,31.83555],[34.63683,31.83653],[34.63673,31.83715],[34.6367,31.83781],[34.63685,31.83916],[34.63804,31.84338],[34.63804,31.84388],[34.63811,31.84411],[34.63792,31.84459],[34.63784,31.84459],[34.63774,31.84471],[34.63721,31.84888],[34.63739,31.84938],[34.63736,31.84975],[34.63719,31.84996],[34.63698,31.85002],[34.63673,31.84994],[34.63661,31.84974],[34.63729,31.84462],[34.63755,31.84364],[34.63643,31.83921],[34.6363,31.8382],[34.63631,31.83738],[34.6364,31.83634],[34.63669,31.83545],[34.63723,31.83427],[34.63712,31.83408],[34.63722,31.83391],[34.63519,31.82987],[34.63482,31.82882],[34.63457,31.82802],[34.63443,31.82569],[34.63458,31.82448],[34.63478,31.82368],[34.635,31.82349],[34.6354,31.82243],[34.63644,31.82081],[34.63767,31.81953],[34.63883,31.81868],[34.64011,31.81788],[34.63989,31.81701],[34.6398,31.81622],[34.63786,31.81208],[34.63714,31.81012],[34.63441,31.80461],[34.63238,31.80088],[34.631,31.79895],[34.63017,31.79794],[34.62876,31.79679],[34.62799,31.79701],[34.62717,31.79701],[34.6267,31.79684],[34.62611,31.79633],[34.62587,31.79632],[34.62584,31.79626],[34.62589,31.79613],[34.62601,31.79606],[34.62616,31.79607],[34.62638,31.79629],[34.62645,31.79624],[34.62703,31.79666],[34.62759,31.79679],[34.62845,31.7966],[34.62896,31.79633],[34.62904,31.79609],[34.62932,31.79616],[34.62935,31.79606],[34.62907,31.796],[34.62908,31.79595],[34.6293,31.79601],[34.62932,31.79596],[34.62909,31.79591],[34.62939,31.79502],[34.62895,31.79457],[34.62882,31.79421],[34.62881,31.79391],[34.62678,31.79309],[34.62647,31.79345],[34.62598,31.79427],[34.62576,31.79487],[34.62562,31.79552],[34.62562,31.79656],[34.62551,31.79657],[34.62568,31.79729],[34.62604,31.79818],[34.62612,31.79821],[34.62618,31.79833],[34.62604,31.79845],[34.62584,31.79834],[34.62539,31.79727],[34.62524,31.7965],[34.62523,31.79584],[34.62532,31.79511],[34.62549,31.79447],[34.62576,31.79383],[34.62618,31.79316],[34.6267,31.7927],[34.62707,31.79247],[34.62621,31.79101],[34.62464,31.78732],[34.60758,31.75666],[34.59926,31.74411],[34.58141,31.71537],[34.56731,31.6949],[34.56678,31.69424],[34.56592,31.69268],[34.56491,31.69104],[34.56331,31.68876],[34.56268,31.68823],[34.56229,31.68812],[34.56204,31.68813],[34.56177,31.68818],[34.56158,31.68829],[34.56194,31.68878],[34.56179,31.68889],[34.56166,31.68884],[34.56105,31.68808],[34.56107,31.68795],[34.5613,31.68792],[34.56153,31.68822],[34.56202,31.68783],[34.56204,31.68747],[34.56195,31.6872],[34.5617,31.68687],[34.56135,31.68676],[34.56095,31.68679],[34.56069,31.68692],[34.56063,31.68683],[34.56082,31.68665],[34.56096,31.68633],[34.561,31.686],[34.56091,31.68573],[34.56062,31.68547],[34.56029,31.68535],[34.55995,31.68535],[34.55955,31.68554],[34.5598,31.68519],[34.55984,31.68491],[34.55964,31.68452],[34.55834,31.68372],[34.55804,31.68346],[34.55717,31.68381],[34.55622,31.68393],[34.55609,31.68388],[34.55606,31.68381],[34.55614,31.68371],[34.55659,31.68373],[34.55659,31.68365],[34.55646,31.68366],[34.55646,31.68359],[34.55638,31.68359],[34.55659,31.68355],[34.55659,31.68349],[34.55637,31.68349],[34.55642,31.68346],[34.55639,31.68326],[34.55736,31.68266],[34.55726,31.68254],[34.55736,31.68248],[34.55677,31.68173],[34.55669,31.68178],[34.55661,31.68168],[34.55673,31.68161],[34.5555,31.68007],[34.55432,31.68076],[34.55418,31.68061],[34.55397,31.68094],[34.55387,31.68146],[34.554,31.68195],[34.55609,31.68499],[34.55622,31.6851],[34.55617,31.68523],[34.55609,31.68524],[34.5559,31.68516],[34.55369,31.68197],[34.55363,31.68172],[34.55363,31.6812],[34.55385,31.68068],[34.55403,31.68041],[34.55463,31.68002],[34.55464,31.67976],[34.55454,31.67937],[34.55429,31.67898],[34.55391,31.67858],[34.55288,31.67834],[34.55254,31.6775],[34.55201,31.67711],[34.55183,31.67665],[34.55161,31.67492],[34.55024,31.67302],[34.54972,31.67217],[34.54894,31.67062],[34.54738,31.6687],[34.54611,31.66674],[34.54506,31.66552],[34.54392,31.66368],[34.53386,31.65084],[34.5316,31.64733],[34.53047,31.64611],[34.53041,31.64573],[34.52994,31.64519],[34.52952,31.64514],[34.52853,31.64379],[34.52823,31.64348],[34.5279,31.64334],[34.5274,31.64353],[34.5274,31.64345],[34.52766,31.64333],[34.528,31.64306],[34.52805,31.64286],[34.52783,31.64244],[34.52731,31.64231],[34.52715,31.64221],[34.5263,31.64118],[34.52624,31.64105],[34.52629,31.64088],[34.52618,31.64065],[34.52476,31.63937],[34.52403,31.63887],[34.52323,31.63849],[34.52266,31.63875],[34.52232,31.63883],[34.52149,31.63927],[34.52161,31.63946],[34.5216,31.63959],[34.52142,31.63967],[34.52126,31.63963],[34.5209,31.63852],[34.52092,31.63844],[34.521,31.63838],[34.52117,31.6384],[34.52131,31.63875],[34.52153,31.63874],[34.52153,31.63864],[34.52282,31.63787],[34.52287,31.63791],[34.52244,31.63819],[34.52255,31.63833],[34.5232,31.63808],[34.52373,31.63774],[34.5238,31.63764],[34.52374,31.63748],[34.52367,31.63752],[34.52342,31.63723],[34.52359,31.63711],[34.52351,31.63702],[34.52334,31.63704],[34.52323,31.63688],[34.5233,31.63677],[34.52323,31.6367],[34.52288,31.63656],[34.52265,31.63656],[34.52183,31.6369],[34.52135,31.63728],[34.52112,31.63762],[34.52096,31.6376],[34.5209,31.63748],[34.52117,31.63715],[34.52182,31.63665],[34.52087,31.63549],[34.52071,31.63549],[34.5204,31.63524],[34.52012,31.6354],[34.52007,31.63568],[34.52015,31.63577],[34.51837,31.63684],[34.51828,31.63673],[34.51778,31.63676],[34.51737,31.63701],[34.51737,31.63715],[34.51795,31.63785],[34.51804,31.63785],[34.51848,31.63758],[34.51851,31.6375],[34.51844,31.63736],[34.51848,31.63728],[34.51856,31.63729],[34.51895,31.63769],[34.51885,31.63781],[34.51868,31.63767],[34.51856,31.63769],[34.51814,31.63794],[34.51811,31.63804],[34.51854,31.63848],[34.51963,31.63997],[34.52011,31.64033],[34.52009,31.64053],[34.51989,31.64064],[34.51962,31.64055],[34.51831,31.6389],[34.518,31.63836],[34.51693,31.63714],[34.51689,31.63702],[34.517,31.63682],[34.51725,31.63676],[34.51782,31.63646],[34.51782,31.63595],[34.51751,31.63522],[34.5174,31.63465],[34.51761,31.63417],[34.51878,31.63355],[34.51938,31.63358],[34.5194,31.63341],[34.51903,31.63332],[34.51891,31.63292],[34.51834,31.63223],[34.51836,31.63202],[34.51807,31.63174],[34.51784,31.63174],[34.51668,31.6302],[34.51567,31.62959],[34.51531,31.62896],[34.51498,31.62868],[34.51428,31.62719],[34.50776,31.61789],[34.50509,31.61431],[34.50203,31.60931],[34.49536,31.60159],[34.49177,31.59605],[34.49128,31.5958],[34.49064,31.59626],[34.49042,31.59635],[34.49024,31.59618],[34.49026,31.59601],[34.49117,31.59535],[34.49069,31.59424],[34.49026,31.59355],[34.48949,31.59277],[34.48878,31.59192],[34.4878,31.5904],[34.4864,31.58858],[34.48328,31.58388],[34.48279,31.58333],[34.48228,31.58256],[34.48175,31.5821],[34.48132,31.58134],[34.481,31.58092],[34.47979,31.57971],[34.47874,31.57827],[34.47866,31.57804],[34.47836,31.57779],[34.47767,31.57671],[34.47544,31.57374],[34.47505,31.57334],[34.47476,31.57282],[34.47384,31.5718],[34.47303,31.57069],[34.4723,31.57004],[34.47207,31.56992],[34.47128,31.57043],[34.47117,31.57037],[34.47111,31.57029],[34.47203,31.56964],[34.47205,31.56945],[34.47176,31.56873],[34.47056,31.56754],[34.47047,31.56724],[34.47037,31.56713],[34.47026,31.56708],[34.4697,31.56731],[34.46962,31.56728],[34.46959,31.56724],[34.4702,31.5669],[34.47011,31.56671],[34.46933,31.56562],[34.46905,31.56548],[34.46745,31.56317],[34.467,31.56267],[34.46651,31.56187],[34.46523,31.56054],[34.46482,31.56079],[34.46473,31.56079],[34.46471,31.56065],[34.46509,31.56041],[34.46468,31.55979],[34.46347,31.55863],[34.46239,31.55703],[34.46203,31.55665],[34.46173,31.55611],[34.46032,31.55451],[34.45979,31.55367],[34.45897,31.55262],[34.45868,31.55251],[34.45826,31.55281],[34.4582,31.55273],[34.45865,31.55236],[34.45862,31.55212],[34.45781,31.55103],[34.4577,31.55077],[34.45701,31.55004],[34.45692,31.54982],[34.45557,31.54845],[34.45496,31.54878],[34.45485,31.54871],[34.45517,31.54847],[34.45455,31.5478],[34.45385,31.54683],[35.25,31.54683],[35.25,33.12999],[35.1472,33.12999]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91558,32.61899],[34.91526,32.6192],[34.91513,32.61917],[34.91523,32.61852],[34.91574,32.61869],[34.91573,32.61886],[34.91558,32.61899]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.08234,33.0419],[35.08214,33.04186],[35.0821,33.04177],[35.08219,33.04156],[35.08201,33.04103],[35.08236,33.04141],[35.08246,33.04172],[35.08234,33.0419]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.92892,32.70086],[34.92882,32.70074],[34.92884,32.70064],[34.92898,32.70056],[34.9291,32.70064],[34.92906,32.70079],[34.92892,32.70086]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.93359,32.70788],[34.93353,32.70763],[34.93362,32.70749],[34.9338,32.70736],[34.93399,32.70736],[34.93406,32.70748],[34.93399,32.70768],[34.93369,32.70788],[34.93359,32.70788]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.07224,32.91868],[35.07206,32.91865],[35.07194,32.91856],[35.07215,32.91847],[35.07217,32.91855],[35.07228,32.91853],[35.07232,32.9186],[35.07224,32.91868]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.748,32.05138],[34.74777,32.05129],[34.74789,32.05123],[34.74802,32.05128],[34.748,32.05138]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.7511,32.05652],[34.75112,32.05634],[34.75123,32.05633],[34.75137,32.0565],[34.7512,32.05659],[34.7511,32.05652]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.75125,32.05701],[34.75098,32.05699],[34.75099,32.05689],[34.75133,32.05685],[34.75133,32.05677],[34.75148,32.05667],[34.75152,32.05682],[34.75146,32.05687],[34.75152,32.05693],[34.75125,32.05701]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.75026,32.05636],[34.75037,32.05659],[34.75027,32.05664],[34.74992,32.05651],[34.74996,32.05635],[34.75013,32.05624],[34.7502,32.05626],[34.7502,32.05637],[34.75026,32.05636]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.75173,32.05739],[34.75139,32.05743],[34.75103,32.05757],[34.75094,32.05741],[34.75102,32.05735],[34.75071,32.05732],[34.7511,32.05708],[34.75142,32.05706],[34.75135,32.05717],[34.75122,32.05721],[34.7512,32.05734],[34.7518,32.05727],[34.75184,32.05735],[34.75173,32.05739]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.7507,32.05606],[34.75091,32.05619],[34.75076,32.05643],[34.75038,32.0561],[34.75029,32.05617],[34.75031,32.05607],[34.75051,32.05601],[34.7507,32.05606]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.09467,33.07424],[35.09425,33.07415],[35.09417,33.07417],[35.0942,33.07433],[35.0939,33.07413],[35.09378,33.07395],[35.0938,33.07379],[35.09394,33.07366],[35.09408,33.07362],[35.09419,33.07368],[35.09431,33.07362],[35.09443,33.07343],[35.09501,33.07344],[35.09524,33.0736],[35.09531,33.07353],[35.09527,33.07342],[35.09535,33.07334],[35.0956,33.07358],[35.09545,33.07374],[35.09515,33.07388],[35.09489,33.07415],[35.09467,33.07424]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.09465,33.08046],[35.09418,33.0806],[35.09408,33.08067],[35.09404,33.08061],[35.09436,33.0803],[35.09447,33.08037],[35.09465,33.08036],[35.09465,33.08046]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.0807,33.03916],[35.08073,33.03927],[35.08062,33.03931],[35.0804,33.0392],[35.08059,33.03911],[35.0807,33.03916]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.08574,33.04605],[35.0852,33.04592],[35.08489,33.04548],[35.08502,33.04546],[35.08529,33.04526],[35.08565,33.0457],[35.08569,33.04583],[35.08581,33.04592],[35.08574,33.04605]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.08296,33.03902],[35.08279,33.03903],[35.08273,33.03893],[35.08291,33.03878],[35.08304,33.03887],[35.08296,33.03902]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.90234,32.55548],[34.90217,32.55546],[34.90207,32.55532],[34.90204,32.55513],[34.90212,32.55501],[34.90261,32.55501],[34.903,32.55524],[34.90307,32.55537],[34.90303,32.55546],[34.9026,32.55552],[34.90234,32.55548]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.90276,32.55589],[34.90283,32.55597],[34.90296,32.55597],[34.90293,32.55608],[34.90247,32.55626],[34.90228,32.55621],[34.90223,32.55608],[34.90229,32.55596],[34.90276,32.55589]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.90155,32.5539],[34.90137,32.55369],[34.90119,32.55366],[34.90104,32.55353],[34.90101,32.55323],[34.90118,32.55318],[34.90155,32.55349],[34.90165,32.55384],[34.90155,32.5539]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.90353,32.55675],[34.90356,32.55698],[34.90324,32.55698],[34.90321,32.55683],[34.90336,32.55671],[34.90353,32.55675]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91473,32.61203],[34.91473,32.61196],[34.91483,32.61194],[34.91489,32.61185],[34.91485,32.61179],[34.9146,32.61172],[34.91464,32.61171],[34.91461,32.61163],[34.91454,32.61157],[34.91417,32.61147],[34.91406,32.61132],[34.914,32.6111],[34.91385,32.61094],[34.91371,32.61093],[34.91375,32.6107],[34.91381,32.61064],[34.91404,32.61055],[34.91456,32.61064],[34.91446,32.6107],[34.91476,32.61083],[34.91473,32.61089],[34.91502,32.61113],[34.91515,32.61183],[34.91504,32.61198],[34.91519,32.61214],[34.91511,32.61218],[34.91507,32.6121],[34.91476,32.6121],[34.91473,32.61203]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91429,32.60611],[34.9141,32.60596],[34.91396,32.60597],[34.91405,32.60563],[34.91423,32.60554],[34.91462,32.60553],[34.91463,32.6056],[34.9148,32.60563],[34.91494,32.60578],[34.91499,32.60595],[34.91488,32.60605],[34.91429,32.60611]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91395,32.61034],[34.91373,32.61031],[34.91374,32.61022],[34.91384,32.61018],[34.91371,32.61003],[34.91376,32.60999],[34.91374,32.60989],[34.91386,32.60978],[34.91387,32.60969],[34.91372,32.60942],[34.91386,32.60925],[34.91369,32.60906],[34.91356,32.60902],[34.91357,32.6088],[34.91335,32.60866],[34.91344,32.60858],[34.91337,32.60847],[34.91374,32.60835],[34.91403,32.60837],[34.91413,32.60828],[34.91424,32.60828],[34.91443,32.60832],[34.91466,32.60859],[34.91474,32.6089],[34.91504,32.609],[34.91502,32.60924],[34.91483,32.60945],[34.91463,32.6095],[34.91469,32.60961],[34.91458,32.60981],[34.91431,32.60994],[34.91415,32.60992],[34.91395,32.61034]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.91446,32.60813],[34.91418,32.60784],[34.91419,32.6075],[34.91434,32.60749],[34.91459,32.60765],[34.91482,32.60765],[34.91493,32.60739],[34.9151,32.60727],[34.91523,32.60727],[34.91539,32.60743],[34.91539,32.60757],[34.91519,32.60759],[34.91495,32.60796],[34.91481,32.60798],[34.91476,32.60812],[34.91446,32.60813]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[34.92559,32.67764],[34.92546,32.67746],[34.92562,32.67739],[34.92592,32.67742],[34.92603,32.67751],[34.92595,32.67754],[34.92597,32.67759],[34.92574,32.67766],[34.92559,32.67764]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.08265,33.04188],[35.08273,33.04173],[35.08313,33.04158],[35.08367,33.04179],[35.08393,33.04172],[35.08376,33.04193],[35.08324,33.0421],[35.08263,33.0421],[35.0825,33.04191],[35.08265,33.04188]]]}},{"type":"Feature","properties":{},"geometry":{"type":"Polygon","coordinates":[[[35.09397,33.07139],[35.09394,33.07103],[35.09431,33.07113],[35.09465,33.07139],[35.09467,33.07166],[35.09479,33.07174],[35.09496,33.0717],[35.0951,33.07208],[35.09455,33.07229],[35.09448,33.07218],[35.09411,33.07215],[35.09397,33.07188],[35.09397,33.07139]]]}}]};
+
+</script>
+  <script>
+/* Ghost-net survey map – Israeli Mediterranean coast.
+ * Static app: Leaflet map + survey records. Records are kept in the
+ * team's shared store when the page runs as a claude.ai artifact (the
+ * "db" capability), otherwise in this browser's localStorage, with JSON
+ * backup/import and GeoJSON/CSV export in both cases. */
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------- constants
+  const STORAGE_KEY = "divepoints-v1";
+  const SHALLOW_LIMIT = 15;
+  // Running inside the claude.ai artifact viewer (tiles, GPS and plain
+  // downloads are blocked there; a shared store is available instead).
+  const IN_CLAUDE = !!(window.claude && typeof window.claude.use === "function");
+
+  const REGIONS = {
+    north: "צפון", carmel: "חיפה והכרמל", sharon: "השרון", center: "גוש דן", south: "דרום",
+  };
+  const CATEGORIES = {
+    reef:        { label: "ריף / רכס סלעי", icon: "🪸" },
+    wreck:       { label: "ספינה טרופה",    icon: "⚓" },
+    pipe:        { label: "צינור / תשתית",  icon: "🛢" },
+    breakwater:  { label: "שובר גלים / נמל", icon: "🧱" },
+    archaeology: { label: "אתר ארכאולוגי",  icon: "🏛" },
+    island:      { label: "אי / סלע",        icon: "🏝" },
+    other:       { label: "אחר",             icon: "📍" },
+  };
+  const STATUSES = {
+    unsurveyed: { label: "טרם נסקר",          color: "var(--st-unsurveyed)", hex: "#8a96a3" },
+    clean:      { label: "נסקר – ללא ממצאים", color: "var(--st-clean)",      hex: "#2e9d5b" },
+    nets:       { label: "נסקר – נמצאו רשתות", color: "var(--st-nets)",       hex: "#d23a3a" },
+    partial:    { label: "נסקר חלקית",        color: "var(--st-partial)",    hex: "#e88b1a" },
+    aborted:    { label: "לא בוצע (בוטל)",    color: "var(--st-aborted)",    hex: "#7a5cc4" },
+  };
+  const RISK = { high: "גבוה", medium: "בינוני", low: "נמוך" };
+
+  const SURVEY_STATUS = { done: "בוצע", partial: "בוצע חלקית", "not-done": "לא בוצע" };
+  const FINDING_TYPES = {
+    "gill-net": "רשת עומדת (מכמורת/רשת השהייה)",
+    "trammel": "רשת משולשת",
+    "line": "חוט דיג / חכה",
+    "longline": "פרנגל (קו ארוך)",
+    "trap": "מלכודת / כלוב",
+    "rope": "חבל",
+    "other": "אחר",
+  };
+  const REMOVED = { yes: "הוסר במלואו", partial: "הוסר חלקית", no: "לא הוסר" };
+
+  // -------------------------------------------------------------------- state
+  const state = loadState();
+  let map, markersLayer, routesLayer, tempLayer;
+  const markerById = {};
+  let drawMode = null;     // { type, ... }
+  let draft = null;        // survey currently being edited
+  let gpsWatchId = null;
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        return { customSites: s.customSites || [], siteEdits: s.siteEdits || {}, surveys: s.surveys || [] };
+      }
+    } catch (e) { console.error(e); }
+    return { customSites: [], siteEdits: {}, surveys: [] };
+  }
+  function saveLocal() {
+    if (db) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      toast("שגיאה בשמירה: " + e.message);
+    }
+  }
+
+  // ---------------------------------------------------------- shared store
+  // Collections in the shared store, keyed by state field.
+  const COLLECTIONS = { surveys: "surveys", customSites: "sites", siteEdits: "edits" };
+  let db = null;
+  let renderPending = false;
+
+  async function initSharedStore() {
+    if (!IN_CLAUDE) return;
+    let store = null;
+    try { store = await window.claude.use("db"); } catch (e) { store = null; }
+    if (!store) { setSyncBadge(); return; }
+    db = store;
+    setSyncBadge();
+    for (const [key, coll] of Object.entries(COLLECTIONS)) {
+      db.collection(coll).onSnapshot((snap) => {
+        const rows = snap.docs.map((d) => Object.assign({}, clone(d.data()), { id: d.id }));
+        if (key === "siteEdits") {
+          state.siteEdits = {};
+          for (const r of rows) { const id = r.id; delete r.id; state.siteEdits[id] = r; }
+        } else {
+          state[key] = rows;
+        }
+        requestRender();
+      }, () => toast("הסנכרון עם הצוות נעצר. רענן את הדף."));
+    }
+  }
+
+  // Write one record (data = null deletes it). Local state is already
+  // updated by the caller; the shared store echoes the change back.
+  async function persist(key, id, data) {
+    if (!db) { saveLocal(); return true; }
+    try {
+      const ref = db.collection(COLLECTIONS[key]).doc(id);
+      if (data) await ref.set(clone(data)); else await ref.delete();
+      return true;
+    } catch (e) {
+      toast(e && e.code === "invalid_argument"
+        ? "אין לך הרשאה לשמור בנתוני הצוות – בקש מבעל המפה הרשאת עריכה."
+        : "השמירה נכשלה: " + ((e && e.message) || "שגיאה לא ידועה"));
+      return false;
+    }
+  }
+
+  function clone(o) { return JSON.parse(JSON.stringify(o || {})); }
+
+  // Re-render from snapshots, but never while the user is placing or
+  // dragging something on the map (that would drop their marker).
+  function requestRender() {
+    if (drawMode) { renderPending = true; return; }
+    renderAll();
+  }
+
+  function setSyncBadge() {
+    const el = $("#sync");
+    if (!el) return;
+    el.textContent = db ? "● נתונים משותפים לכל הצוות" : "● נשמר במכשיר הזה בלבד";
+    el.className = "sync " + (db ? "shared" : "local");
+  }
+
+  // ------------------------------------------------------------------ helpers
+  const $ = (sel) => document.querySelector(sel);
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function uid(prefix) {
+    return prefix + "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function today() { return new Date().toISOString().slice(0, 10); }
+  function toast(msg) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.classList.remove("hidden");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.add("hidden"), 3500);
+  }
+  async function download(filename, text, mime) {
+    if (IN_CLAUDE) {
+      let dl = null;
+      try { dl = await window.claude.use("downloads"); } catch (e) { dl = null; }
+      if (!dl) { toast("הורדת קבצים אינה זמינה בתצוגה הזו"); return; }
+      try { await dl.save({ filename: filename.replace(/\.geojson$/, ".json"), data: text }); }
+      catch (e) { if (!e || e.code !== "declined") toast("ההורדה נכשלה: " + ((e && e.message) || "")); }
+      return;
+    }
+    const blob = new Blob([text], { type: mime || "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  // In-page confirmation (native confirm dialogs are unavailable in some views).
+  function confirmDialog(message, okLabel) {
+    return new Promise((resolve) => {
+      const box = $("#confirm");
+      $("#confirm-msg").textContent = message;
+      $("#confirm-ok").textContent = okLabel || "מחק";
+      box.classList.remove("hidden");
+      const done = (v) => {
+        box.classList.add("hidden");
+        $("#confirm-ok").onclick = $("#confirm-cancel").onclick = null;
+        resolve(v);
+      };
+      $("#confirm-ok").onclick = () => done(true);
+      $("#confirm-cancel").onclick = () => done(false);
+    });
+  }
+  function fmtDepth(d) { return d ? `${d[0]}–${d[1]} מ'` : "—"; }
+  function routeLengthM(route) {
+    let m = 0;
+    for (let i = 1; i < (route || []).length; i++) m += L.latLng(route[i - 1]).distanceTo(L.latLng(route[i]));
+    return Math.round(m);
+  }
+
+  // -------------------------------------------------------------------- sites
+  function allSites() {
+    const base = window.DIVE_SITES.map((s) => applyEdits(Object.assign({ verified: false }, s)));
+    const custom = state.customSites.map((s) => applyEdits(Object.assign({ custom: true, verified: true }, s)));
+    return base.concat(custom);
+  }
+  function applyEdits(site) {
+    const e = state.siteEdits[site.id];
+    if (!e) return site;
+    if (site.line && e.lat != null) {
+      const dLat = e.lat - site.lat, dLng = e.lng - site.lng;
+      site.line = site.line.map(([a, b]) => [a + dLat, b + dLng]);
+    }
+    return Object.assign(site, e);
+  }
+  function getSite(id) { return allSites().find((s) => s.id === id); }
+
+  function surveysFor(siteId) {
+    return state.surveys
+      .filter((s) => s.siteId === siteId)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0));
+  }
+  function siteStatus(siteId) {
+    const last = surveysFor(siteId)[0];
+    if (!last) return "unsurveyed";
+    if (last.status === "not-done") return "aborted";
+    if (last.netsFound === "yes") return "nets";
+    if (last.status === "partial") return "partial";
+    return "clean";
+  }
+
+  // ---------------------------------------------------------------------- map
+  function initMap() {
+    map = L.map("map", { zoomControl: true }).setView([32.55, 34.9], 9);
+
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+    });
+    const sat = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 19, attribution: "Imagery &copy; Esri" });
+    const ocean = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 13, attribution: "&copy; Esri, GEBCO, NOAA" });
+    const seamarks = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: "&copy; OpenSeaMap",
+    });
+
+    // Built-in basemap: land polygons from OSM coastline. Works offline
+    // and wherever map tiles are blocked.
+    const land = L.layerGroup();
+    if (window.COAST_LAND) {
+      L.geoJSON(window.COAST_LAND, {
+        interactive: false,
+        style: { color: "#a8956c", weight: 1, fillColor: "#ece3cf", fillOpacity: 1 },
+        attribution: "קו חוף &copy; OpenStreetMap contributors",
+      }).addTo(land);
+    }
+
+    markersLayer = L.layerGroup();
+    routesLayer = L.layerGroup();
+    tempLayer = L.layerGroup();
+
+    if (IN_CLAUDE) {
+      map.getContainer().classList.add("sea");
+      land.addTo(map);
+      L.control.layers(
+        { "מפה מובנית (קו חוף)": land },
+        { "מסלולי סקרים": routesLayer },
+        { position: "topleft" }
+      ).addTo(map);
+    } else {
+      sat.addTo(map);
+      L.control.layers(
+        { "תצלום אוויר": sat, "מפת רחובות": osm, "מפה ימית (עומקים)": ocean, "מפה מובנית (ללא אינטרנט)": land },
+        { "סימוני ים (OpenSeaMap)": seamarks, "מסלולי סקרים": routesLayer },
+        { position: "topleft" }
+      ).addTo(map);
+      map.on("baselayerchange", (e) => map.getContainer().classList.toggle("sea", e.layer === land));
+    }
+    markersLayer.addTo(map);
+    routesLayer.addTo(map);
+    tempLayer.addTo(map);
+    L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
+
+    map.on("click", onMapClick);
+  }
+
+  function markerIcon(site, status) {
+    const st = STATUSES[status];
+    const cat = CATEGORIES[site.category] || CATEGORIES.other;
+    return L.divIcon({
+      className: "",
+      html: `<div class="site-marker${site.verified || site.src === "osm" ? "" : " unverified"}" style="background:${st.hex}" title="${esc(site.name)}">${cat.icon}</div>`,
+      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
+    });
+  }
+
+  function renderMap() {
+    markersLayer.clearLayers();
+    for (const k in markerById) delete markerById[k];
+    const visible = new Set(filteredSites().map((s) => s.id));
+
+    for (const site of allSites()) {
+      if (!visible.has(site.id)) continue;
+      const status = siteStatus(site.id);
+      if (site.line) {
+        L.polyline(site.line, { color: STATUSES[status].hex, weight: 5, opacity: 0.85, dashArray: site.verified || site.src === "osm" ? null : "8 6" })
+          .bindPopup(() => popupHtml(site.id))
+          .addTo(markersLayer);
+      }
+      const m = L.marker([site.lat, site.lng], { icon: markerIcon(site, status) })
+        .bindPopup(() => popupHtml(site.id), { maxWidth: 300 })
+        .addTo(markersLayer);
+      markerById[site.id] = m;
+    }
+    renderRoutes();
+  }
+
+  function renderRoutes() {
+    routesLayer.clearLayers();
+    for (const s of state.surveys) {
+      if (s.route && s.route.length > 1) {
+        L.polyline(s.route, { color: "#ffd400", weight: 3, opacity: 0.9 })
+          .bindTooltip(`${esc((getSite(s.siteId) || {}).name || "")} · ${esc(s.date)}`)
+          .addTo(routesLayer);
+      }
+      for (const f of s.findings || []) {
+        if (f.lat != null) {
+          L.circleMarker([f.lat, f.lng], { radius: 6, color: "#fff", weight: 2, fillColor: "#d23a3a", fillOpacity: 1 })
+            .bindTooltip(`ממצא: ${esc(FINDING_TYPES[f.type] || f.type)}`)
+            .addTo(routesLayer);
+        }
+      }
+    }
+  }
+
+  function popupHtml(siteId) {
+    const site = getSite(siteId);
+    const status = siteStatus(siteId);
+    const surveys = surveysFor(siteId);
+    const last = surveys[0];
+    const cat = CATEGORIES[site.category] || CATEGORIES.other;
+    const gmaps = `https://www.google.com/maps/search/?api=1&query=${site.lat},${site.lng}`;
+    return `<div class="popup">
+      <h3>${cat.icon} ${esc(site.name)}</h3>
+      <div class="meta">${esc(cat.label)} · ${esc(REGIONS[site.region] || "")} · עומק ${fmtDepth(site.depth)} · סיכון ${esc(RISK[site.risk] || "—")}</div>
+      <span class="badge" style="background:${STATUSES[status].hex}">${STATUSES[status].label}</span>
+      <p>${esc(site.desc || "")}</p>
+      ${site.verified ? "" : site.src === "osm"
+        ? `<div class="warn">📍 מיקום לפי OpenStreetMap – מומלץ לאמת בשטח</div>`
+        : `<div class="warn">⚠ מיקום משוער – יש לאמת בשטח (ניתן לגרור עם "תקן מיקום")</div>`}
+      ${last ? `<div class="meta">סקר אחרון: ${esc(last.date)} · ${esc(SURVEY_STATUS[last.status])} · סה"כ ${surveys.length} סקרים</div>` : ""}
+      <div class="meta">${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}</div>
+      <div class="actions">
+        <button class="btn small" data-act="new-survey" data-id="${esc(site.id)}">+ סקר חדש</button>
+        <button class="btn btn-ghost small" data-act="history" data-id="${esc(site.id)}">היסטוריה (${surveys.length})</button>
+        <button class="btn btn-ghost small" data-act="move" data-id="${esc(site.id)}">תקן מיקום</button>
+        ${site.verified ? "" : `<button class="btn btn-ghost small" data-act="verify" data-id="${esc(site.id)}">אשר מיקום</button>`}
+        <a class="btn btn-ghost small" href="${gmaps}" target="_blank" rel="noopener">ניווט</a>
+        ${site.custom ? `<button class="btn btn-ghost small" data-act="edit-site" data-id="${esc(site.id)}">ערוך</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  // ----------------------------------------------------------------- sidebar
+  function filteredSites() {
+    const q = $("#search").value.trim();
+    const region = $("#filter-region").value;
+    const cat = $("#filter-category").value;
+    const st = $("#filter-status").value;
+    const shallow = $("#filter-shallow").checked;
+    return allSites().filter((s) =>
+      (!q || s.name.includes(q) || (s.desc || "").includes(q)) &&
+      (!region || s.region === region) &&
+      (!cat || s.category === cat) &&
+      (!st || siteStatus(s.id) === st) &&
+      (!shallow || !s.depth || s.depth[0] <= SHALLOW_LIMIT));
+  }
+
+  function renderSidebar() {
+    const sites = filteredSites();
+    const all = allSites();
+    const counts = {};
+    for (const s of all) { const k = siteStatus(s.id); counts[k] = (counts[k] || 0) + 1; }
+    const surveyed = all.length - (counts.unsurveyed || 0);
+    $("#stats").innerHTML = `
+      <div class="stat"><b>${all.length}</b><span>אתרים</span></div>
+      <div class="stat"><b>${surveyed}</b><span>נסקרו</span></div>
+      <div class="stat"><b style="color:${STATUSES.nets.hex}">${counts.nets || 0}</b><span>עם רשתות</span></div>`;
+
+    $("#site-list").innerHTML = sites.map((s) => {
+      const st = siteStatus(s.id);
+      const cat = CATEGORIES[s.category] || CATEGORIES.other;
+      return `<li data-id="${esc(s.id)}">
+        <span class="dot" style="background:${STATUSES[st].hex}"></span>
+        <div><div class="name">${cat.icon} ${esc(s.name)}</div>
+        <div class="meta">${esc(REGIONS[s.region] || "")} · ${fmtDepth(s.depth)} · ${STATUSES[st].label}</div></div>
+      </li>`;
+    }).join("") || `<li class="meta">אין אתרים תואמים</li>`;
+  }
+
+  function renderAll() { renderSidebar(); renderMap(); }
+
+  function initSidebar() {
+    $("#filter-category").innerHTML += Object.entries(CATEGORIES)
+      .map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join("");
+    $("#filter-status").innerHTML += Object.entries(STATUSES)
+      .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+    $("#legend").innerHTML = Object.values(STATUSES)
+      .map((v) => `<span><i style="background:${v.hex}"></i>${v.label}</span>`).join("") +
+      `<span>מסגרת מקווקוות = מיקום משוער</span>`;
+
+    ["#search", "#filter-region", "#filter-category", "#filter-status", "#filter-shallow"].forEach((sel) =>
+      $(sel).addEventListener("input", renderAll));
+
+    $("#site-list").addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (!li) return;
+      const site = getSite(li.dataset.id);
+      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 15));
+      setTimeout(() => markerById[site.id] && markerById[site.id].openPopup(), 300);
+      if (window.innerWidth <= 760) $("#sidebar").classList.add("collapsed");
+    });
+
+    $("#toggle-sidebar").addEventListener("click", () => {
+      $("#sidebar").classList.toggle("collapsed");
+      setTimeout(() => map.invalidateSize(), 50);
+    });
+    if (window.innerWidth <= 760) $("#sidebar").classList.add("collapsed");
+  }
+
+  // -------------------------------------------------------------- popup acts
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]");
+    if (!b) return;
+    const id = b.dataset.id;
+    switch (b.dataset.act) {
+      case "new-survey": map.closePopup(); openSurveyForm(newSurvey(id)); break;
+      case "history": map.closePopup(); openHistory(id); break;
+      case "move": map.closePopup(); startMoveSite(id); break;
+      case "verify": setSiteEdit(id, { verified: true }); map.closePopup(); renderAll(); toast("המיקום סומן כמאומת"); break;
+      case "edit-site": map.closePopup(); openSiteForm(getSite(id)); break;
+    }
+  });
+
+  function setSiteEdit(id, patch) {
+    const custom = state.customSites.find((s) => s.id === id);
+    if (custom) { Object.assign(custom, patch); persist("customSites", id, custom); }
+    else {
+      state.siteEdits[id] = Object.assign({}, state.siteEdits[id], patch);
+      persist("siteEdits", id, state.siteEdits[id]);
+    }
+  }
+
+  function startMoveSite(id) {
+    const site = getSite(id);
+    const m = markerById[id];
+    if (!m) return;
+    m.dragging.enable();
+    const original = m.getLatLng();
+    setDrawMode({ type: "move", siteId: id }, `גרור את "${site.name}" למיקום הנכון ולחץ סיום`, {
+      done: () => {
+        const ll = m.getLatLng();
+        setSiteEdit(id, { lat: +ll.lat.toFixed(6), lng: +ll.lng.toFixed(6), verified: true });
+        renderAll();
+        toast("המיקום עודכן");
+      },
+      cancel: () => { m.setLatLng(original); m.dragging.disable(); },
+      noUndo: true,
+    });
+  }
+
+  // ------------------------------------------------------------- draw modes
+  function setDrawMode(mode, msg, handlers) {
+    drawMode = Object.assign(mode, handlers);
+    $("#draw-msg").textContent = msg;
+    $("#draw-undo").classList.toggle("hidden", !!handlers.noUndo);
+    $("#draw-bar").classList.remove("hidden");
+    $("#map").style.cursor = "crosshair";
+    // Let clicks pass through markers/lines so points can be placed on top of them.
+    $("#map").classList.toggle("drawing", !!handlers.click);
+  }
+  function endDrawMode() {
+    drawMode = null;
+    tempLayer.clearLayers();
+    $("#draw-bar").classList.add("hidden");
+    $("#map").style.cursor = "";
+    $("#map").classList.remove("drawing");
+    if (renderPending) { renderPending = false; setTimeout(renderAll, 0); }
+  }
+  function updateDrawMsg(msg) { $("#draw-msg").textContent = msg; }
+
+  $("#draw-done").addEventListener("click", () => { const m = drawMode; endDrawMode(); m && m.done && m.done(); });
+  $("#draw-cancel").addEventListener("click", () => { const m = drawMode; endDrawMode(); m && m.cancel && m.cancel(); });
+  $("#draw-undo").addEventListener("click", () => drawMode && drawMode.undo && drawMode.undo());
+
+  function onMapClick(e) {
+    if (!drawMode || !drawMode.click) return;
+    drawMode.click(e.latlng);
+  }
+
+  $("#add-site-btn").addEventListener("click", () => {
+    setDrawMode({ type: "new-site" }, "לחץ על המפה במיקום האתר החדש", {
+      noUndo: true,
+      click: (ll) => { endDrawMode(); openSiteForm({ lat: +ll.lat.toFixed(6), lng: +ll.lng.toFixed(6) }); },
+      done: () => {},
+    });
+  });
+
+  // ---------------------------------------------------------------- modal
+  function openModal(html) {
+    $("#modal-body").innerHTML = html;
+    $("#modal").classList.remove("hidden");
+    $("#modal").scrollTop = 0;
+  }
+  function closeModal() { $("#modal").classList.add("hidden"); }
+  $("#modal-close").addEventListener("click", () => { closeModal(); draft = null; });
+
+  // -------------------------------------------------------- custom site form
+  function openSiteForm(site) {
+    const isNew = !site.id;
+    openModal(`<h2>${isNew ? "אתר חדש" : "עריכת אתר"}</h2>
+      <form id="site-form">
+        <div class="grid">
+          <label class="field wide"><span>שם האתר</span><input name="name" required value="${esc(site.name || "")}"></label>
+          <label class="field"><span>סוג</span><select name="category">${opts(mapLabels(CATEGORIES), site.category || "reef")}</select></label>
+          <label class="field"><span>אזור</span><select name="region">${opts(REGIONS, site.region || guessRegion(site.lat))}</select></label>
+          <label class="field"><span>עומק מינימלי (מ')</span><input name="dmin" type="number" step="0.5" value="${site.depth ? site.depth[0] : ""}"></label>
+          <label class="field"><span>עומק מקסימלי (מ')</span><input name="dmax" type="number" step="0.5" value="${site.depth ? site.depth[1] : ""}"></label>
+          <label class="field"><span>סיכון לרשתות</span><select name="risk">${opts(RISK, site.risk || "medium")}</select></label>
+          <label class="field"><span>קו רוחב</span><input name="lat" type="number" step="any" required value="${site.lat}"></label>
+          <label class="field"><span>קו אורך</span><input name="lng" type="number" step="any" required value="${site.lng}"></label>
+          <label class="field wide"><span>תיאור</span><textarea name="desc">${esc(site.desc || "")}</textarea></label>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit">שמור</button>
+          ${!isNew ? `<button class="btn btn-danger" type="button" id="delete-site">מחק אתר</button>` : ""}
+        </div>
+      </form>`);
+    $("#site-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {
+        name: f.get("name").trim(), category: f.get("category"), region: f.get("region"),
+        risk: f.get("risk"), desc: f.get("desc").trim(),
+        lat: +f.get("lat"), lng: +f.get("lng"),
+        depth: f.get("dmin") !== "" && f.get("dmax") !== "" ? [+f.get("dmin"), +f.get("dmax")] : null,
+        verified: true,
+      };
+      let rec;
+      if (isNew) { rec = Object.assign({ id: uid("custom") }, data); state.customSites.push(rec); }
+      else { rec = Object.assign(state.customSites.find((s) => s.id === site.id), data); }
+      persist("customSites", rec.id, rec);
+      closeModal(); renderAll(); toast("האתר נשמר");
+    });
+    const del = $("#delete-site");
+    if (del) del.addEventListener("click", async () => {
+      const gone = surveysFor(site.id);
+      if (!(await confirmDialog(`למחוק את "${site.name}"${gone.length ? ` ואת ${gone.length} הסקרים שלו` : ""}?`))) return;
+      state.customSites = state.customSites.filter((s) => s.id !== site.id);
+      state.surveys = state.surveys.filter((s) => s.siteId !== site.id);
+      closeModal(); renderAll();
+      await persist("customSites", site.id, null);
+      for (const s of gone) await persist("surveys", s.id, null);
+    });
+  }
+  function guessRegion(lat) {
+    if (lat >= 32.9) return "north";
+    if (lat >= 32.48) return "carmel";
+    if (lat >= 32.15) return "sharon";
+    if (lat >= 31.97) return "center";
+    return "south";
+  }
+  function mapLabels(obj) { const o = {}; for (const k in obj) o[k] = obj[k].label || obj[k]; return o; }
+  function opts(obj, selected, withEmpty) {
+    return (withEmpty ? `<option value="">—</option>` : "") +
+      Object.entries(obj).map(([k, v]) => `<option value="${k}"${k === selected ? " selected" : ""}>${esc(v)}</option>`).join("");
+  }
+
+  // -------------------------------------------------------------- survey form
+  function newSurvey(siteId) {
+    return {
+      id: uid("survey"), siteId, isNew: true,
+      date: today(), timeStart: "", team: "", status: "done", notDoneReason: "",
+      netsFound: "no", findings: [],
+      siteDescription: "", bottomType: "", marineLife: "",
+      water: { visibility: "", temp: "", current: "", currentDir: "", seaState: "", wind: "", notes: "" },
+      dive: { entry: "", maxDepth: "", duration: "", divers: "", description: "" },
+      route: [], routeSource: "",
+    };
+  }
+
+  function openSurveyForm(s) {
+    draft = s;
+    const site = getSite(s.siteId);
+    const w = s.water, d = s.dive;
+    openModal(`<h2>סקר – ${esc(site.name)}</h2>
+      <form id="survey-form">
+        <fieldset><legend>פרטי הסקר</legend><div class="grid">
+          <label class="field"><span>תאריך</span><input type="date" name="date" value="${esc(s.date)}" required></label>
+          <label class="field"><span>שעת כניסה</span><input type="time" name="timeStart" value="${esc(s.timeStart)}"></label>
+          <label class="field"><span>סטטוס</span><select name="status">${opts(SURVEY_STATUS, s.status)}</select></label>
+          <label class="field wide"><span>צוות / צוללים</span><input name="team" value="${esc(s.team)}" placeholder="שמות הצוללים, ראש צוות"></label>
+          <label class="field wide" id="reason-field"><span>סיבה לאי ביצוע / ביצוע חלקי</span><input name="notDoneReason" value="${esc(s.notDoneReason)}" placeholder="למשל: ים גבוה, ראות אפסית, תקלה בציוד"></label>
+        </div></fieldset>
+
+        <fieldset><legend>ממצאים</legend>
+          <div class="row">
+            <label class="check"><input type="radio" name="netsFound" value="no"${s.netsFound === "no" ? " checked" : ""}> לא נמצאו רשתות / ציוד דיג</label>
+            <label class="check"><input type="radio" name="netsFound" value="yes"${s.netsFound === "yes" ? " checked" : ""}> נמצאו רשתות / ציוד דיג</label>
+          </div>
+          <div id="findings-wrap">
+            <div id="findings">${s.findings.map(findingHtml).join("")}</div>
+            <button type="button" class="btn btn-ghost small" id="add-finding">+ הוסף ממצא</button>
+          </div>
+        </fieldset>
+
+        <fieldset><legend>תיאור האתר</legend><div class="grid">
+          <label class="field"><span>סוג קרקעית</span><input name="bottomType" value="${esc(s.bottomType)}" placeholder="סלע כורכר, חול, נקיקים…"></label>
+          <label class="field"><span>חי ים בולט</span><input name="marineLife" value="${esc(s.marineLife)}"></label>
+          <label class="field wide"><span>תיאור האתר</span><textarea name="siteDescription">${esc(s.siteDescription)}</textarea></label>
+        </div></fieldset>
+
+        <fieldset><legend>תנאי המים</legend><div class="grid">
+          <label class="field"><span>ראות (מ')</span><input type="number" step="0.5" name="w.visibility" value="${esc(w.visibility)}"></label>
+          <label class="field"><span>טמפ' מים (°C)</span><input type="number" step="0.5" name="w.temp" value="${esc(w.temp)}"></label>
+          <label class="field"><span>זרם</span><select name="w.current">${opts({ none: "אין", weak: "חלש", moderate: "בינוני", strong: "חזק" }, w.current, true)}</select></label>
+          <label class="field"><span>כיוון זרם</span><select name="w.currentDir">${opts({ N: "צפון", S: "דרום", E: "מזרח (לחוף)", W: "מערב (מהחוף)" }, w.currentDir, true)}</select></label>
+          <label class="field"><span>מצב ים / גובה גל (מ')</span><input name="w.seaState" value="${esc(w.seaState)}" placeholder="למשל: 0.5"></label>
+          <label class="field"><span>רוח</span><input name="w.wind" value="${esc(w.wind)}" placeholder="כיוון ועוצמה"></label>
+          <label class="field wide"><span>הערות על תנאי המים</span><textarea name="w.notes">${esc(w.notes)}</textarea></label>
+        </div></fieldset>
+
+        <fieldset><legend>הצלילה והמסלול</legend><div class="grid">
+          <label class="field"><span>נקודת כניסה</span><input name="d.entry" value="${esc(d.entry)}" placeholder="חוף / סירה"></label>
+          <label class="field"><span>עומק מקסימלי (מ')</span><input type="number" step="0.1" name="d.maxDepth" value="${esc(d.maxDepth)}"></label>
+          <label class="field"><span>משך (דק')</span><input type="number" name="d.duration" value="${esc(d.duration)}"></label>
+          <label class="field"><span>מספר צוללים</span><input type="number" name="d.divers" value="${esc(d.divers)}"></label>
+          <label class="field wide"><span>תיאור הצלילה והמסלול</span><textarea name="d.description">${esc(d.description)}</textarea></label>
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-ghost small" id="draw-route">✏️ צייר מסלול על המפה</button>
+          ${IN_CLAUDE ? "" : `<button type="button" class="btn btn-ghost small" id="gps-route">📡 הקלט GPS (מצוף/סירה)</button>`}
+          <label class="btn btn-ghost small">📂 ייבא GPX<input type="file" id="gpx-file" accept=".gpx,application/gpx+xml" hidden></label>
+          <button type="button" class="btn btn-ghost small" id="clear-route">נקה מסלול</button>
+        </div>
+        <div class="hint" id="route-info">${routeInfo(s)}</div>
+        </fieldset>
+
+        <div class="form-actions">
+          <button class="btn" type="submit">שמור סקר</button>
+          <button class="btn btn-ghost" type="button" id="cancel-survey">ביטול</button>
+          ${!s.isNew ? `<button class="btn btn-danger" type="button" id="delete-survey">מחק סקר</button>` : ""}
+        </div>
+      </form>`);
+
+    const form = $("#survey-form");
+    const syncVisibility = () => {
+      const st = form.elements.status.value;
+      $("#reason-field").classList.toggle("hidden", st === "done");
+      $("#findings-wrap").classList.toggle("hidden", form.elements.netsFound.value !== "yes");
+    };
+    form.addEventListener("change", syncVisibility);
+    syncVisibility();
+
+    $("#add-finding").addEventListener("click", () => {
+      readSurveyForm();
+      draft.findings.push({ type: "gill-net", amount: "", size: "", depth: "", removed: "no", notes: "", lat: null, lng: null });
+      openSurveyForm(draft);
+    });
+    $("#findings").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-f]");
+      if (!b) return;
+      const i = +b.dataset.i;
+      readSurveyForm();
+      if (b.dataset.f === "remove") { draft.findings.splice(i, 1); openSurveyForm(draft); }
+      if (b.dataset.f === "locate") pickFindingLocation(i);
+    });
+
+    $("#draw-route").addEventListener("click", startDrawRoute);
+    if ($("#gps-route")) $("#gps-route").addEventListener("click", startGpsRoute);
+    $("#gpx-file").addEventListener("change", importGpx);
+    $("#clear-route").addEventListener("click", () => {
+      draft.route = []; draft.routeSource = ""; $("#route-info").innerHTML = routeInfo(draft);
+    });
+    $("#cancel-survey").addEventListener("click", () => { closeModal(); draft = null; });
+    const del = $("#delete-survey");
+    if (del) del.addEventListener("click", async () => {
+      if (!(await confirmDialog("למחוק את הסקר?"))) return;
+      const id = draft.id;
+      state.surveys = state.surveys.filter((x) => x.id !== id);
+      closeModal(); draft = null; renderAll();
+      if (await persist("surveys", id, null)) toast("הסקר נמחק");
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      readSurveyForm();
+      const rec = JSON.parse(JSON.stringify(draft));
+      delete rec.isNew;
+      if (rec.netsFound !== "yes") rec.findings = [];
+      rec.updatedAt = Date.now();
+      const i = state.surveys.findIndex((x) => x.id === rec.id);
+      if (i >= 0) state.surveys[i] = rec;
+      else { rec.createdAt = rec.updatedAt; state.surveys.push(rec); }
+      closeModal(); draft = null; renderAll();
+      persist("surveys", rec.id, rec).then((ok) => ok && toast(db ? "הסקר נשמר ושותף עם הצוות" : "הסקר נשמר"));
+    });
+  }
+
+  function findingHtml(f, i) {
+    return `<div class="finding" data-i="${i}">
+      <div class="grid">
+        <label class="field"><span>סוג</span><select name="f.type">${opts(FINDING_TYPES, f.type)}</select></label>
+        <label class="field"><span>כמות / יחידות</span><input name="f.amount" value="${esc(f.amount)}"></label>
+        <label class="field"><span>גודל משוער (מ' / מ"ר)</span><input name="f.size" value="${esc(f.size)}"></label>
+        <label class="field"><span>עומק (מ')</span><input type="number" step="0.1" name="f.depth" value="${esc(f.depth)}"></label>
+        <label class="field"><span>הוסר?</span><select name="f.removed">${opts(REMOVED, f.removed)}</select></label>
+        <label class="field wide"><span>הערות (מצב, בעלי חיים לכודים, נדרש ציוד)</span><input name="f.notes" value="${esc(f.notes)}"></label>
+      </div>
+      <div class="row">
+        <button type="button" class="btn btn-ghost small" data-f="locate" data-i="${i}">📍 ${f.lat != null ? "מיקום: " + f.lat.toFixed(5) + ", " + f.lng.toFixed(5) : "סמן מיקום על המפה"}</button>
+        <button type="button" class="btn btn-ghost small" data-f="remove" data-i="${i}">הסר ממצא</button>
+      </div>
+    </div>`;
+  }
+
+  function routeInfo(s) {
+    if (!s.route || s.route.length < 2) return "לא הוגדר מסלול.";
+    const src = { drawn: "צויר ידנית", gps: "הוקלט ב-GPS", gpx: "יובא מ-GPX" }[s.routeSource] || "";
+    return `מסלול: ${s.route.length} נקודות · ${routeLengthM(s.route)} מ' · ${src}`;
+  }
+
+  function readSurveyForm() {
+    const form = $("#survey-form");
+    if (!form || !draft) return;
+    const f = new FormData(form);
+    draft.date = f.get("date");
+    draft.timeStart = f.get("timeStart");
+    draft.status = f.get("status");
+    draft.team = f.get("team");
+    draft.notDoneReason = f.get("notDoneReason");
+    draft.netsFound = f.get("netsFound") || "no";
+    draft.bottomType = f.get("bottomType");
+    draft.marineLife = f.get("marineLife");
+    draft.siteDescription = f.get("siteDescription");
+    for (const k of Object.keys(draft.water)) draft.water[k] = f.get("w." + k) || "";
+    for (const k of Object.keys(draft.dive)) draft.dive[k] = f.get("d." + k) || "";
+    form.querySelectorAll(".finding").forEach((el) => {
+      const fd = draft.findings[+el.dataset.i];
+      el.querySelectorAll("[name^='f.']").forEach((inp) => { fd[inp.name.slice(2)] = inp.value; });
+    });
+  }
+
+  // Temporarily hide the form, let the user interact with the map, then reopen.
+  function withMapInteraction(fn) {
+    readSurveyForm();
+    closeModal();
+    fn();
+  }
+  function reopenDraft() { if (draft) openSurveyForm(draft); }
+
+  function startDrawRoute() {
+    withMapInteraction(() => {
+      const pts = draft.route.slice();
+      const line = L.polyline(pts, { color: "#ffd400", weight: 4 }).addTo(tempLayer);
+      const site = getSite(draft.siteId);
+      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 16));
+      const msg = () => `לחץ על המפה להוספת נקודות למסלול (${pts.length} נק', ${routeLengthM(pts)} מ')`;
+      setDrawMode({ type: "route" }, msg(), {
+        click: (ll) => { pts.push([+ll.lat.toFixed(6), +ll.lng.toFixed(6)]); line.setLatLngs(pts); updateDrawMsg(msg()); },
+        undo: () => { pts.pop(); line.setLatLngs(pts); updateDrawMsg(msg()); },
+        done: () => { draft.route = pts; draft.routeSource = "drawn"; reopenDraft(); },
+        cancel: reopenDraft,
+      });
+    });
+  }
+
+  function startGpsRoute() {
+    if (!navigator.geolocation) { toast("המכשיר אינו תומך ב-GPS"); return; }
+    withMapInteraction(() => {
+      const pts = [];
+      const line = L.polyline(pts, { color: "#ffd400", weight: 4 }).addTo(tempLayer);
+      const msg = () => `מקליט GPS… ${pts.length} נקודות, ${routeLengthM(pts)} מ'. השאר את המסך פתוח.`;
+      const stop = () => { if (gpsWatchId != null) navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; };
+      gpsWatchId = navigator.geolocation.watchPosition((p) => {
+        const pt = [+p.coords.latitude.toFixed(6), +p.coords.longitude.toFixed(6)];
+        const prev = pts[pts.length - 1];
+        if (prev && L.latLng(prev).distanceTo(L.latLng(pt)) < 3) return; // ignore jitter
+        pts.push(pt); line.setLatLngs(pts); map.panTo(pt); updateDrawMsg(msg());
+      }, (err) => toast("שגיאת GPS: " + err.message), { enableHighAccuracy: true, maximumAge: 0 });
+      setDrawMode({ type: "gps" }, "ממתין לאות GPS…", {
+        noUndo: true,
+        done: () => { stop(); if (pts.length > 1) { draft.route = pts; draft.routeSource = "gps"; } reopenDraft(); },
+        cancel: () => { stop(); reopenDraft(); },
+      });
+    });
+  }
+
+  function importGpx(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    file.text().then((txt) => {
+      const xml = new DOMParser().parseFromString(txt, "application/xml");
+      let nodes = xml.querySelectorAll("trkpt");
+      if (!nodes.length) nodes = xml.querySelectorAll("rtept");
+      if (!nodes.length) nodes = xml.querySelectorAll("wpt");
+      const pts = Array.from(nodes).map((n) => [+(+n.getAttribute("lat")).toFixed(6), +(+n.getAttribute("lon")).toFixed(6)]);
+      if (pts.length < 2) { toast("לא נמצאו נקודות מסלול בקובץ"); return; }
+      readSurveyForm();
+      draft.route = pts; draft.routeSource = "gpx";
+      $("#route-info").innerHTML = routeInfo(draft);
+      toast(`יובאו ${pts.length} נקודות`);
+    });
+  }
+
+  function pickFindingLocation(i) {
+    withMapInteraction(() => {
+      const site = getSite(draft.siteId);
+      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 16));
+      if (draft.route.length > 1) L.polyline(draft.route, { color: "#ffd400", weight: 3 }).addTo(tempLayer);
+      setDrawMode({ type: "finding" }, "לחץ על המפה במיקום הממצא", {
+        noUndo: true,
+        click: (ll) => {
+          draft.findings[i].lat = +ll.lat.toFixed(6);
+          draft.findings[i].lng = +ll.lng.toFixed(6);
+          endDrawMode(); reopenDraft();
+        },
+        done: reopenDraft,
+        cancel: reopenDraft,
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------ history
+  function openHistory(siteId) {
+    const site = getSite(siteId);
+    const list = surveysFor(siteId);
+    const v = (x, suffix) => (x === "" || x == null ? "—" : esc(x) + (suffix || ""));
+    openModal(`<h2>היסטוריית סקרים – ${esc(site.name)}</h2>
+      ${list.length ? "" : "<p>טרם בוצעו סקרים באתר זה.</p>"}
+      ${list.map((s) => `<div class="survey-item">
+        <div class="row"><b>${esc(s.date)} ${esc(s.timeStart || "")}</b>
+          <span class="badge" style="background:${STATUSES[surveyStatusKey(s)].hex}">${esc(SURVEY_STATUS[s.status])}${s.netsFound === "yes" ? " · נמצאו רשתות" : ""}</span>
+        </div>
+        <dl>
+          <dt>צוות</dt><dd>${v(s.team)}</dd>
+          ${s.status !== "done" ? `<dt>סיבה</dt><dd>${v(s.notDoneReason)}</dd>` : ""}
+          ${(s.findings || []).map((f, i) => `<dt>ממצא ${i + 1}</dt><dd>${esc(FINDING_TYPES[f.type] || f.type)} · כמות ${v(f.amount)} · גודל ${v(f.size)} · עומק ${v(f.depth, " מ'")} · ${esc(REMOVED[f.removed] || "")}${f.notes ? " · " + esc(f.notes) : ""}</dd>`).join("")}
+          <dt>תיאור האתר</dt><dd>${v(s.siteDescription)}${s.bottomType ? "\nקרקעית: " + esc(s.bottomType) : ""}${s.marineLife ? "\nחי ים: " + esc(s.marineLife) : ""}</dd>
+          <dt>תנאי מים</dt><dd>ראות ${v(s.water.visibility, " מ'")} · טמפ' ${v(s.water.temp, "°")} · זרם ${v(s.water.current)} ${esc(s.water.currentDir || "")} · ים ${v(s.water.seaState)} · רוח ${v(s.water.wind)}${s.water.notes ? "\n" + esc(s.water.notes) : ""}</dd>
+          <dt>צלילה</dt><dd>כניסה ${v(s.dive.entry)} · עומק מקס' ${v(s.dive.maxDepth, " מ'")} · ${v(s.dive.duration, " דק'")} · ${v(s.dive.divers)} צוללים${s.dive.description ? "\n" + esc(s.dive.description) : ""}</dd>
+          <dt>מסלול</dt><dd>${routeInfo(s)}</dd>
+        </dl>
+        <div class="row">
+          <button class="btn btn-ghost small" data-hist="edit" data-sid="${esc(s.id)}">ערוך</button>
+          ${s.route && s.route.length > 1 ? `<button class="btn btn-ghost small" data-hist="show" data-sid="${esc(s.id)}">הצג מסלול במפה</button>` : ""}
+        </div>
+      </div>`).join("")}
+      <div class="form-actions"><button class="btn" data-act="new-survey" data-id="${esc(siteId)}">+ סקר חדש</button></div>`);
+
+    $("#modal-body").querySelectorAll("[data-hist]").forEach((b) => b.addEventListener("click", () => {
+      const s = state.surveys.find((x) => x.id === b.dataset.sid);
+      if (b.dataset.hist === "edit") openSurveyForm(JSON.parse(JSON.stringify(s)));
+      else { closeModal(); map.fitBounds(L.polyline(s.route).getBounds(), { padding: [40, 40] }); }
+    }));
+  }
+  function surveyStatusKey(s) {
+    if (s.status === "not-done") return "aborted";
+    if (s.netsFound === "yes") return "nets";
+    if (s.status === "partial") return "partial";
+    return "clean";
+  }
+
+  // ------------------------------------------------------------- data export
+  $("#data-btn").addEventListener("click", () => {
+    openModal(`<h2>ניהול נתונים</h2>
+      <p class="hint">${db
+        ? "הנתונים משותפים: כל סקר שנשמר מופיע מיד אצל כל מי שפותח את המפה. מומלץ לייצא גיבוי מדי פעם."
+        : "הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. כדי לשתף עם הצוות או לגבות – ייצא קובץ גיבוי והעבר אותו (וואטסאפ / דרייב). ייבוא ממזג את הנתונים עם הקיימים."}</p>
+      <p>סה"כ: ${state.surveys.length} סקרים · ${state.customSites.length} אתרים שנוספו · ${Object.keys(state.siteEdits).length} תיקוני מיקום</p>
+      <fieldset><legend>ייצוא</legend><div class="row">
+        <button class="btn" id="exp-json">גיבוי מלא (JSON)</button>
+        <button class="btn btn-ghost" id="exp-geojson">GeoJSON (ל-Google My Maps / QGIS)</button>
+        <button class="btn btn-ghost" id="exp-csv">טבלת סקרים (CSV לאקסל)</button>
+      </div></fieldset>
+      <fieldset><legend>ייבוא</legend>
+        <label class="btn btn-ghost">בחר קובץ גיבוי JSON<input type="file" id="imp-json" accept=".json,application/json" hidden></label>
+      </fieldset>
+      ${db ? "" : `<fieldset><legend>איפוס</legend>
+        <button class="btn btn-danger" id="reset-data">מחק את כל הנתונים המקומיים</button>
+      </fieldset>`}`);
+    $("#exp-json").addEventListener("click", exportJson);
+    $("#exp-geojson").addEventListener("click", exportGeoJson);
+    $("#exp-csv").addEventListener("click", exportCsv);
+    $("#imp-json").addEventListener("change", importJson);
+    if ($("#reset-data")) $("#reset-data").addEventListener("click", async () => {
+      if (!(await confirmDialog("למחוק את כל הסקרים, האתרים שנוספו ותיקוני המיקום מהמכשיר? מומלץ לייצא גיבוי קודם."))) return;
+      state.customSites = []; state.siteEdits = {}; state.surveys = [];
+      saveLocal(); closeModal(); renderAll();
+    });
+  });
+
+  function stamp() { return new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-"); }
+
+  function exportJson() {
+    const data = { app: "divepoints", version: 1, exportedAt: new Date().toISOString(),
+      customSites: state.customSites, siteEdits: state.siteEdits, surveys: state.surveys };
+    download(`divepoints-backup-${stamp()}.json`, JSON.stringify(data, null, 2));
+  }
+
+  function importJson(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    file.text().then((txt) => {
+      let data;
+      try { data = JSON.parse(txt); } catch (err) { toast("קובץ לא תקין"); return; }
+      if (data.app !== "divepoints") { toast("זה לא קובץ גיבוי של האפליקציה"); return; }
+      let added = 0, updated = 0;
+      const writes = [];
+      for (const s of data.surveys || []) {
+        const i = state.surveys.findIndex((x) => x.id === s.id);
+        if (i < 0) { state.surveys.push(s); added++; writes.push(["surveys", s.id, s]); }
+        else if ((s.updatedAt || 0) > (state.surveys[i].updatedAt || 0)) { state.surveys[i] = s; updated++; writes.push(["surveys", s.id, s]); }
+      }
+      for (const s of data.customSites || []) {
+        const i = state.customSites.findIndex((x) => x.id === s.id);
+        const rec = i < 0 ? s : Object.assign(state.customSites[i], s);
+        if (i < 0) state.customSites.push(rec);
+        writes.push(["customSites", rec.id, rec]);
+      }
+      for (const [id, e] of Object.entries(data.siteEdits || {})) {
+        state.siteEdits[id] = e; writes.push(["siteEdits", id, e]);
+      }
+      closeModal(); renderAll();
+      (async () => {
+        if (db) { for (const w of writes) await persist(...w); } else saveLocal();
+        toast(`יובאו ${added} סקרים חדשים, ${updated} עודכנו`);
+      })();
+    });
+  }
+
+  function exportGeoJson() {
+    const features = [];
+    for (const site of allSites()) {
+      const last = surveysFor(site.id)[0];
+      const props = {
+        kind: "site", id: site.id, name: site.name, category: CATEGORIES[site.category]?.label,
+        region: REGIONS[site.region], depth: fmtDepth(site.depth), risk: RISK[site.risk],
+        description: site.desc, status: STATUSES[siteStatus(site.id)].label,
+        location_verified: !!site.verified, location_source: site.verified ? "field" : site.src === "osm" ? "OpenStreetMap" : "estimate", last_survey: last ? last.date : "",
+        surveys: surveysFor(site.id).length,
+      };
+      features.push({ type: "Feature", properties: props,
+        geometry: site.line
+          ? { type: "LineString", coordinates: site.line.map(([a, b]) => [b, a]) }
+          : { type: "Point", coordinates: [site.lng, site.lat] } });
+    }
+    for (const s of state.surveys) {
+      const siteName = (getSite(s.siteId) || {}).name;
+      if (s.route && s.route.length > 1) {
+        features.push({ type: "Feature",
+          properties: { kind: "route", site: siteName, date: s.date, team: s.team, length_m: routeLengthM(s.route) },
+          geometry: { type: "LineString", coordinates: s.route.map(([a, b]) => [b, a]) } });
+      }
+      for (const f of s.findings || []) {
+        if (f.lat == null) continue;
+        features.push({ type: "Feature",
+          properties: { kind: "finding", site: siteName, date: s.date, type: FINDING_TYPES[f.type],
+            amount: f.amount, size: f.size, depth: f.depth, removed: REMOVED[f.removed], notes: f.notes },
+          geometry: { type: "Point", coordinates: [f.lng, f.lat] } });
+      }
+    }
+    download(`divepoints-${stamp()}.geojson`, JSON.stringify({ type: "FeatureCollection", features }, null, 2), "application/geo+json");
+  }
+
+  function exportCsv() {
+    const cols = ["אתר", "אזור", "תאריך", "שעה", "סטטוס", "סיבה", "צוות", "נמצאו רשתות", "ממצאים",
+      "תיאור אתר", "קרקעית", "חי ים", "ראות", "טמפ'", "זרם", "כיוון זרם", "מצב ים", "רוח", "הערות מים",
+      "כניסה", "עומק מקס'", "משך", "צוללים", "תיאור צלילה", "אורך מסלול (מ')"];
+    const rows = state.surveys.map((s) => {
+      const site = getSite(s.siteId) || {};
+      return [site.name, REGIONS[site.region], s.date, s.timeStart, SURVEY_STATUS[s.status], s.notDoneReason, s.team,
+        s.netsFound === "yes" ? "כן" : "לא",
+        (s.findings || []).map((f) => `${FINDING_TYPES[f.type]} (${f.amount || "?"}, ${f.size || "?"}, ${REMOVED[f.removed]})`).join("; "),
+        s.siteDescription, s.bottomType, s.marineLife, s.water.visibility, s.water.temp, s.water.current, s.water.currentDir,
+        s.water.seaState, s.water.wind, s.water.notes, s.dive.entry, s.dive.maxDepth, s.dive.duration, s.dive.divers,
+        s.dive.description, routeLengthM(s.route)];
+    });
+    const cell = (x) => `"${String(x == null ? "" : x).replace(/"/g, '""')}"`;
+    const csv = "﻿" + [cols, ...rows].map((r) => r.map(cell).join(",")).join("\r\n");
+    download(`divepoints-surveys-${stamp()}.csv`, csv, "text/csv;charset=utf-8");
+  }
+
+  // --------------------------------------------------------------------- boot
+  initMap();
+  initSidebar();
+  setSyncBadge();
+  renderAll();
+  initSharedStore();
+})();
+
+</script>

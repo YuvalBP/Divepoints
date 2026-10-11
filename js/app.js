@@ -1,12 +1,17 @@
 /* Ghost-net survey map – Israeli Mediterranean coast.
- * Static app: Leaflet map + surveys stored in the browser (localStorage),
- * with JSON backup/import and GeoJSON/CSV export for sharing. */
+ * Static app: Leaflet map + survey records. Records are kept in the
+ * team's shared store when the page runs as a claude.ai artifact (the
+ * "db" capability), otherwise in this browser's localStorage, with JSON
+ * backup/import and GeoJSON/CSV export in both cases. */
 (function () {
   "use strict";
 
   // ---------------------------------------------------------------- constants
   const STORAGE_KEY = "divepoints-v1";
   const SHALLOW_LIMIT = 15;
+  // Running inside the claude.ai artifact viewer (tiles, GPS and plain
+  // downloads are blocked there; a shared store is available instead).
+  const IN_CLAUDE = !!(window.claude && typeof window.claude.use === "function");
 
   const REGIONS = {
     north: "צפון", carmel: "חיפה והכרמל", sharon: "השרון", center: "גוש דן", south: "דרום",
@@ -59,12 +64,72 @@
     } catch (e) { console.error(e); }
     return { customSites: [], siteEdits: {}, surveys: [] };
   }
-  function saveState() {
+  function saveLocal() {
+    if (db) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       toast("שגיאה בשמירה: " + e.message);
     }
+  }
+
+  // ---------------------------------------------------------- shared store
+  // Collections in the shared store, keyed by state field.
+  const COLLECTIONS = { surveys: "surveys", customSites: "sites", siteEdits: "edits" };
+  let db = null;
+  let renderPending = false;
+
+  async function initSharedStore() {
+    if (!IN_CLAUDE) return;
+    let store = null;
+    try { store = await window.claude.use("db"); } catch (e) { store = null; }
+    if (!store) { setSyncBadge(); return; }
+    db = store;
+    setSyncBadge();
+    for (const [key, coll] of Object.entries(COLLECTIONS)) {
+      db.collection(coll).onSnapshot((snap) => {
+        const rows = snap.docs.map((d) => Object.assign({}, clone(d.data()), { id: d.id }));
+        if (key === "siteEdits") {
+          state.siteEdits = {};
+          for (const r of rows) { const id = r.id; delete r.id; state.siteEdits[id] = r; }
+        } else {
+          state[key] = rows;
+        }
+        requestRender();
+      }, () => toast("הסנכרון עם הצוות נעצר. רענן את הדף."));
+    }
+  }
+
+  // Write one record (data = null deletes it). Local state is already
+  // updated by the caller; the shared store echoes the change back.
+  async function persist(key, id, data) {
+    if (!db) { saveLocal(); return true; }
+    try {
+      const ref = db.collection(COLLECTIONS[key]).doc(id);
+      if (data) await ref.set(clone(data)); else await ref.delete();
+      return true;
+    } catch (e) {
+      toast(e && e.code === "invalid_argument"
+        ? "אין לך הרשאה לשמור בנתוני הצוות – בקש מבעל המפה הרשאת עריכה."
+        : "השמירה נכשלה: " + ((e && e.message) || "שגיאה לא ידועה"));
+      return false;
+    }
+  }
+
+  function clone(o) { return JSON.parse(JSON.stringify(o || {})); }
+
+  // Re-render from snapshots, but never while the user is placing or
+  // dragging something on the map (that would drop their marker).
+  function requestRender() {
+    if (drawMode) { renderPending = true; return; }
+    renderAll();
+  }
+
+  function setSyncBadge() {
+    const el = $("#sync");
+    if (!el) return;
+    el.textContent = db ? "● נתונים משותפים לכל הצוות" : "● נשמר במכשיר הזה בלבד";
+    el.className = "sync " + (db ? "shared" : "local");
   }
 
   // ------------------------------------------------------------------ helpers
@@ -84,7 +149,15 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.add("hidden"), 3500);
   }
-  function download(filename, text, mime) {
+  async function download(filename, text, mime) {
+    if (IN_CLAUDE) {
+      let dl = null;
+      try { dl = await window.claude.use("downloads"); } catch (e) { dl = null; }
+      if (!dl) { toast("הורדת קבצים אינה זמינה בתצוגה הזו"); return; }
+      try { await dl.save({ filename: filename.replace(/\.geojson$/, ".json"), data: text }); }
+      catch (e) { if (!e || e.code !== "declined") toast("ההורדה נכשלה: " + ((e && e.message) || "")); }
+      return;
+    }
     const blob = new Blob([text], { type: mime || "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -92,6 +165,22 @@
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  // In-page confirmation (native confirm dialogs are unavailable in some views).
+  function confirmDialog(message, okLabel) {
+    return new Promise((resolve) => {
+      const box = $("#confirm");
+      $("#confirm-msg").textContent = message;
+      $("#confirm-ok").textContent = okLabel || "מחק";
+      box.classList.remove("hidden");
+      const done = (v) => {
+        box.classList.add("hidden");
+        $("#confirm-ok").onclick = $("#confirm-cancel").onclick = null;
+        resolve(v);
+      };
+      $("#confirm-ok").onclick = () => done(true);
+      $("#confirm-cancel").onclick = () => done(false);
+    });
   }
   function fmtDepth(d) { return d ? `${d[0]}–${d[1]} מ'` : "—"; }
   function routeLengthM(route) {
@@ -148,16 +237,41 @@
       maxZoom: 18, attribution: "&copy; OpenSeaMap",
     });
 
-    sat.addTo(map);
-    markersLayer = L.layerGroup().addTo(map);
-    routesLayer = L.layerGroup().addTo(map);
-    tempLayer = L.layerGroup().addTo(map);
+    // Built-in basemap: land polygons from OSM coastline. Works offline
+    // and wherever map tiles are blocked.
+    const land = L.layerGroup();
+    if (window.COAST_LAND) {
+      L.geoJSON(window.COAST_LAND, {
+        interactive: false,
+        style: { color: "#a8956c", weight: 1, fillColor: "#ece3cf", fillOpacity: 1 },
+        attribution: "קו חוף &copy; OpenStreetMap contributors",
+      }).addTo(land);
+    }
 
-    L.control.layers(
-      { "תצלום אוויר": sat, "מפת רחובות": osm, "מפה ימית (עומקים)": ocean },
-      { "סימוני ים (OpenSeaMap)": seamarks, "מסלולי סקרים": routesLayer },
-      { position: "topleft" }
-    ).addTo(map);
+    markersLayer = L.layerGroup();
+    routesLayer = L.layerGroup();
+    tempLayer = L.layerGroup();
+
+    if (IN_CLAUDE) {
+      map.getContainer().classList.add("sea");
+      land.addTo(map);
+      L.control.layers(
+        { "מפה מובנית (קו חוף)": land },
+        { "מסלולי סקרים": routesLayer },
+        { position: "topleft" }
+      ).addTo(map);
+    } else {
+      sat.addTo(map);
+      L.control.layers(
+        { "תצלום אוויר": sat, "מפת רחובות": osm, "מפה ימית (עומקים)": ocean, "מפה מובנית (ללא אינטרנט)": land },
+        { "סימוני ים (OpenSeaMap)": seamarks, "מסלולי סקרים": routesLayer },
+        { position: "topleft" }
+      ).addTo(map);
+      map.on("baselayerchange", (e) => map.getContainer().classList.toggle("sea", e.layer === land));
+    }
+    markersLayer.addTo(map);
+    routesLayer.addTo(map);
+    tempLayer.addTo(map);
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
 
     map.on("click", onMapClick);
@@ -323,9 +437,11 @@
 
   function setSiteEdit(id, patch) {
     const custom = state.customSites.find((s) => s.id === id);
-    if (custom) Object.assign(custom, patch);
-    else state.siteEdits[id] = Object.assign({}, state.siteEdits[id], patch);
-    saveState();
+    if (custom) { Object.assign(custom, patch); persist("customSites", id, custom); }
+    else {
+      state.siteEdits[id] = Object.assign({}, state.siteEdits[id], patch);
+      persist("siteEdits", id, state.siteEdits[id]);
+    }
   }
 
   function startMoveSite(id) {
@@ -362,6 +478,7 @@
     $("#draw-bar").classList.add("hidden");
     $("#map").style.cursor = "";
     $("#map").classList.remove("drawing");
+    if (renderPending) { renderPending = false; setTimeout(renderAll, 0); }
   }
   function updateDrawMsg(msg) { $("#draw-msg").textContent = msg; }
 
@@ -422,17 +539,21 @@
         depth: f.get("dmin") !== "" && f.get("dmax") !== "" ? [+f.get("dmin"), +f.get("dmax")] : null,
         verified: true,
       };
-      if (isNew) state.customSites.push(Object.assign({ id: uid("custom") }, data));
-      else Object.assign(state.customSites.find((s) => s.id === site.id), data);
-      saveState(); closeModal(); renderAll(); toast("האתר נשמר");
+      let rec;
+      if (isNew) { rec = Object.assign({ id: uid("custom") }, data); state.customSites.push(rec); }
+      else { rec = Object.assign(state.customSites.find((s) => s.id === site.id), data); }
+      persist("customSites", rec.id, rec);
+      closeModal(); renderAll(); toast("האתר נשמר");
     });
     const del = $("#delete-site");
-    if (del) del.addEventListener("click", () => {
-      const n = surveysFor(site.id).length;
-      if (!confirm(`למחוק את "${site.name}"${n ? ` ואת ${n} הסקרים שלו` : ""}?`)) return;
+    if (del) del.addEventListener("click", async () => {
+      const gone = surveysFor(site.id);
+      if (!(await confirmDialog(`למחוק את "${site.name}"${gone.length ? ` ואת ${gone.length} הסקרים שלו` : ""}?`))) return;
       state.customSites = state.customSites.filter((s) => s.id !== site.id);
       state.surveys = state.surveys.filter((s) => s.siteId !== site.id);
-      saveState(); closeModal(); renderAll();
+      closeModal(); renderAll();
+      await persist("customSites", site.id, null);
+      for (const s of gone) await persist("surveys", s.id, null);
     });
   }
   function guessRegion(lat) {
@@ -511,7 +632,7 @@
         </div>
         <div class="row">
           <button type="button" class="btn btn-ghost small" id="draw-route">✏️ צייר מסלול על המפה</button>
-          <button type="button" class="btn btn-ghost small" id="gps-route">📡 הקלט GPS (מצוף/סירה)</button>
+          ${IN_CLAUDE ? "" : `<button type="button" class="btn btn-ghost small" id="gps-route">📡 הקלט GPS (מצוף/סירה)</button>`}
           <label class="btn btn-ghost small">📂 ייבא GPX<input type="file" id="gpx-file" accept=".gpx,application/gpx+xml" hidden></label>
           <button type="button" class="btn btn-ghost small" id="clear-route">נקה מסלול</button>
         </div>
@@ -549,17 +670,19 @@
     });
 
     $("#draw-route").addEventListener("click", startDrawRoute);
-    $("#gps-route").addEventListener("click", startGpsRoute);
+    if ($("#gps-route")) $("#gps-route").addEventListener("click", startGpsRoute);
     $("#gpx-file").addEventListener("change", importGpx);
     $("#clear-route").addEventListener("click", () => {
       draft.route = []; draft.routeSource = ""; $("#route-info").innerHTML = routeInfo(draft);
     });
     $("#cancel-survey").addEventListener("click", () => { closeModal(); draft = null; });
     const del = $("#delete-survey");
-    if (del) del.addEventListener("click", () => {
-      if (!confirm("למחוק את הסקר?")) return;
-      state.surveys = state.surveys.filter((x) => x.id !== draft.id);
-      saveState(); closeModal(); draft = null; renderAll(); toast("הסקר נמחק");
+    if (del) del.addEventListener("click", async () => {
+      if (!(await confirmDialog("למחוק את הסקר?"))) return;
+      const id = draft.id;
+      state.surveys = state.surveys.filter((x) => x.id !== id);
+      closeModal(); draft = null; renderAll();
+      if (await persist("surveys", id, null)) toast("הסקר נמחק");
     });
 
     form.addEventListener("submit", (e) => {
@@ -572,7 +695,8 @@
       const i = state.surveys.findIndex((x) => x.id === rec.id);
       if (i >= 0) state.surveys[i] = rec;
       else { rec.createdAt = rec.updatedAt; state.surveys.push(rec); }
-      saveState(); closeModal(); draft = null; renderAll(); toast("הסקר נשמר");
+      closeModal(); draft = null; renderAll();
+      persist("surveys", rec.id, rec).then((ok) => ok && toast(db ? "הסקר נשמר ושותף עם הצוות" : "הסקר נשמר"));
     });
   }
 
@@ -743,7 +867,9 @@
   // ------------------------------------------------------------- data export
   $("#data-btn").addEventListener("click", () => {
     openModal(`<h2>ניהול נתונים</h2>
-      <p class="hint">הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. כדי לשתף עם הצוות או לגבות – ייצא קובץ גיבוי והעבר אותו (וואטסאפ / דרייב). ייבוא ממזג את הנתונים עם הקיימים.</p>
+      <p class="hint">${db
+        ? "הנתונים משותפים: כל סקר שנשמר מופיע מיד אצל כל מי שפותח את המפה. מומלץ לייצא גיבוי מדי פעם."
+        : "הנתונים נשמרים בדפדפן של המכשיר הזה בלבד. כדי לשתף עם הצוות או לגבות – ייצא קובץ גיבוי והעבר אותו (וואטסאפ / דרייב). ייבוא ממזג את הנתונים עם הקיימים."}</p>
       <p>סה"כ: ${state.surveys.length} סקרים · ${state.customSites.length} אתרים שנוספו · ${Object.keys(state.siteEdits).length} תיקוני מיקום</p>
       <fieldset><legend>ייצוא</legend><div class="row">
         <button class="btn" id="exp-json">גיבוי מלא (JSON)</button>
@@ -753,17 +879,17 @@
       <fieldset><legend>ייבוא</legend>
         <label class="btn btn-ghost">בחר קובץ גיבוי JSON<input type="file" id="imp-json" accept=".json,application/json" hidden></label>
       </fieldset>
-      <fieldset><legend>איפוס</legend>
+      ${db ? "" : `<fieldset><legend>איפוס</legend>
         <button class="btn btn-danger" id="reset-data">מחק את כל הנתונים המקומיים</button>
-      </fieldset>`);
+      </fieldset>`}`);
     $("#exp-json").addEventListener("click", exportJson);
     $("#exp-geojson").addEventListener("click", exportGeoJson);
     $("#exp-csv").addEventListener("click", exportCsv);
     $("#imp-json").addEventListener("change", importJson);
-    $("#reset-data").addEventListener("click", () => {
-      if (!confirm("למחוק את כל הסקרים, האתרים שנוספו ותיקוני המיקום מהמכשיר? מומלץ לייצא גיבוי קודם.")) return;
+    if ($("#reset-data")) $("#reset-data").addEventListener("click", async () => {
+      if (!(await confirmDialog("למחוק את כל הסקרים, האתרים שנוספו ותיקוני המיקום מהמכשיר? מומלץ לייצא גיבוי קודם."))) return;
       state.customSites = []; state.siteEdits = {}; state.surveys = [];
-      saveState(); closeModal(); renderAll();
+      saveLocal(); closeModal(); renderAll();
     });
   });
 
@@ -783,18 +909,26 @@
       try { data = JSON.parse(txt); } catch (err) { toast("קובץ לא תקין"); return; }
       if (data.app !== "divepoints") { toast("זה לא קובץ גיבוי של האפליקציה"); return; }
       let added = 0, updated = 0;
+      const writes = [];
       for (const s of data.surveys || []) {
         const i = state.surveys.findIndex((x) => x.id === s.id);
-        if (i < 0) { state.surveys.push(s); added++; }
-        else if ((s.updatedAt || 0) > (state.surveys[i].updatedAt || 0)) { state.surveys[i] = s; updated++; }
+        if (i < 0) { state.surveys.push(s); added++; writes.push(["surveys", s.id, s]); }
+        else if ((s.updatedAt || 0) > (state.surveys[i].updatedAt || 0)) { state.surveys[i] = s; updated++; writes.push(["surveys", s.id, s]); }
       }
       for (const s of data.customSites || []) {
         const i = state.customSites.findIndex((x) => x.id === s.id);
-        if (i < 0) state.customSites.push(s); else state.customSites[i] = Object.assign(state.customSites[i], s);
+        const rec = i < 0 ? s : Object.assign(state.customSites[i], s);
+        if (i < 0) state.customSites.push(rec);
+        writes.push(["customSites", rec.id, rec]);
       }
-      Object.assign(state.siteEdits, data.siteEdits || {});
-      saveState(); closeModal(); renderAll();
-      toast(`יובאו ${added} סקרים חדשים, ${updated} עודכנו`);
+      for (const [id, e] of Object.entries(data.siteEdits || {})) {
+        state.siteEdits[id] = e; writes.push(["siteEdits", id, e]);
+      }
+      closeModal(); renderAll();
+      (async () => {
+        if (db) { for (const w of writes) await persist(...w); } else saveLocal();
+        toast(`יובאו ${added} סקרים חדשים, ${updated} עודכנו`);
+      })();
     });
   }
 
@@ -853,5 +987,7 @@
   // --------------------------------------------------------------------- boot
   initMap();
   initSidebar();
+  setSyncBadge();
   renderAll();
+  initSharedStore();
 })();
