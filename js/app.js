@@ -354,6 +354,9 @@
     };
     map.on("zoomend", syncZoom);
     map.on("click", onMapClick);
+    // On phones the tool column would cover the site card; hide it meanwhile.
+    map.on("popupopen", () => map.getContainer().classList.add("popup-open"));
+    map.on("popupclose", () => map.getContainer().classList.remove("popup-open"));
     setMapMode(mapMode);
     fitCoast();
     syncZoom();

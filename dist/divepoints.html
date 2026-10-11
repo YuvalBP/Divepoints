@@ -1101,6 +1101,9 @@ legend { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); letter-
 
 /* Street map mode (hosted version): the tiles carry their own labels */
 .mode-streets .map-label.place { display: none !important; }
+@media (max-width: 760px) {
+  .popup-open .map-tools { opacity: 0; pointer-events: none; transition: opacity .15s; }
+}
 
 </style>
 <header class="bar">
@@ -1794,6 +1797,9 @@ window.PLACES = [{"n":"קיסריה","k":"town","lat":32.51314,"lng":34.90584},{
     };
     map.on("zoomend", syncZoom);
     map.on("click", onMapClick);
+    // On phones the tool column would cover the site card; hide it meanwhile.
+    map.on("popupopen", () => map.getContainer().classList.add("popup-open"));
+    map.on("popupclose", () => map.getContainer().classList.remove("popup-open"));
     setMapMode(mapMode);
     fitCoast();
     syncZoom();
