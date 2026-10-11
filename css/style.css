@@ -34,7 +34,10 @@
 
   /* Type */
   --font-ui: "IBM Plex Sans Hebrew", "Segoe UI", Arial, sans-serif;
-  --font-name: "Frank Ruhl Libre", "David", "Times New Roman", serif;
+  --font-display: "Karantina", "Secular One", "Arial Narrow", sans-serif;
+  --slate: #0c2233;          /* header: dive-slate navy */
+  --slate-ink: #eef4f7;
+  --slate-muted: #8fb0c4;
   --font-data: "IBM Plex Mono", ui-monospace, "Courier New", monospace;
   --fs-xs: 11.5px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 24px;
 
@@ -89,7 +92,7 @@ h1, h2, h3 { text-wrap: balance; }
 }
 .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .brand svg { flex: none; color: var(--survey); }
-.brand h1 { margin: 0; font-family: var(--font-name); font-size: 19px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 700; line-height: 1.1; white-space: nowrap; }
 .brand p { margin: 0; font-size: var(--fs-xs); color: var(--muted); letter-spacing: .02em; white-space: nowrap; }
 .bar-actions { display: flex; gap: 8px; flex: none; }
 
@@ -189,7 +192,7 @@ input[type=checkbox], input[type=radio] { width: auto; min-height: 0; }
 }
 .site-list li:hover, .site-list li:focus-visible { background: var(--hover); }
 .site-list .txt { min-width: 0; }
-.site-list .name { font-family: var(--font-name); font-size: 16px; font-weight: 500; line-height: 1.25; }
+.site-list .name { font-family: var(--font-display); font-size: 16px; font-weight: 500; line-height: 1.25; }
 .site-list .meta { font-size: var(--fs-xs); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 .site-list .when { font-size: var(--fs-xs); color: var(--muted); text-align: left; }
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: var(--fs-sm); }
@@ -307,7 +310,7 @@ input[type=checkbox], input[type=radio] { width: auto; min-height: 0; }
 }
 .card-status i { width: 9px; height: 9px; border-radius: 50%; background: var(--st); border: 1.5px solid var(--st-unsurveyed-ink); }
 .card-body { padding: 10px 14px 14px; display: grid; gap: 8px; }
-.card-body h3 { margin: 0; font-family: var(--font-name); font-size: 20px; font-weight: 700; line-height: 1.2; }
+.card-body h3 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1.2; }
 .card-body p { margin: 0; }
 .facts { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--rule); border-radius: 6px; }
 .facts div { padding: 6px 8px; border-inline-start: 1px solid var(--rule); }
@@ -331,7 +334,7 @@ input[type=checkbox], input[type=radio] { width: auto; min-height: 0; }
   padding: 22px; position: relative; box-shadow: var(--shadow);
 }
 .modal-close { position: absolute; top: 12px; left: 12px; }
-.modal h2 { margin: 0 0 4px; font-family: var(--font-name); font-size: var(--fs-xl); font-weight: 700; padding-inline-end: 0; padding-inline-start: 0; }
+.modal h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: var(--fs-xl); font-weight: 700; padding-inline-end: 0; padding-inline-start: 0; }
 .modal .sub { color: var(--muted); font-size: var(--fs-sm); margin: 0 0 16px; }
 fieldset { border: none; border-top: 1px solid var(--rule); margin: 0; padding: 14px 0 16px; }
 legend { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); letter-spacing: .06em; padding: 0 0 8px; }
@@ -437,3 +440,82 @@ legend { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); letter-
 @media (max-width: 760px) {
   .popup-open .map-tools { opacity: 0; pointer-events: none; transition: opacity .15s; }
 }
+
+
+/* ================================================================ type & slate
+   Display: Karantina (tall condensed, signage) for names and numbers.
+   Body: IBM Plex Sans Hebrew. Data: IBM Plex Mono. */
+.bar { background: var(--slate); color: var(--slate-ink); border-bottom: none; height: 60px; }
+.bar .icon-btn { color: var(--slate-ink); }
+.bar .icon-btn:hover { background: rgba(255,255,255,.08); }
+.brand h1 { font-family: var(--font-display); font-weight: 700; font-size: 34px; line-height: .9; letter-spacing: .01em; }
+.brand p { color: var(--slate-muted); font-size: 11px; margin-top: 3px; }
+.brand p .mono { letter-spacing: 0; }
+.brand svg { color: #ff6fb5; }
+.bar .btn { background: transparent; color: var(--slate-ink); border-color: rgba(238,244,247,.28); }
+.bar .btn:hover { background: rgba(255,255,255,.08); }
+.bar #add-site-btn { background: var(--survey); border-color: var(--survey); color: #fff; }
+
+/* Progress: big condensed count + the coast barcode */
+.progress { gap: 12px; padding-top: 18px; }
+.progress-head { align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: nowrap; }
+.count { display: flex; align-items: baseline; font-family: var(--font-display); line-height: .8; font-variant-numeric: tabular-nums; }
+.count .big { font-family: var(--font-display); font-size: 68px; font-weight: 700; }
+.count .slash { font-size: 40px; color: var(--rule); margin: 0 2px; }
+.count .total { font-size: 40px; color: var(--muted); font-weight: 400; }
+.count-label { display: grid; gap: 4px; text-align: left; justify-items: end; }
+.count-label b { font-size: var(--fs-sm); font-weight: 600; }
+.sync { margin: 0; }
+
+.coastbar { display: flex; align-items: flex-end; gap: 2px; height: 34px; padding-bottom: 2px; border-bottom: 1px solid var(--rule); }
+.tick {
+  flex: 1; min-width: 2px; height: var(--h); padding: 0; border: none; border-radius: 2px 2px 0 0;
+  background: var(--st); cursor: pointer; transition: transform .12s ease-out;
+  transform-origin: bottom;
+}
+.tick.s-unsurveyed { background: color-mix(in srgb, var(--st-unsurveyed-ink) 22%, transparent); }
+.tick:hover, .tick:focus-visible { transform: scaleY(1.18); outline: none; background: var(--survey); }
+.coastbar-ends { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: -6px; letter-spacing: .02em; }
+
+/* Section heads in the list */
+.group { font-family: var(--font-display); font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: .01em; padding: 10px 16px 4px; line-height: 1; align-items: baseline; }
+.group .n { font-family: var(--font-data); font-size: var(--fs-xs); color: var(--muted); font-weight: 500; }
+.site-list .name { font-family: var(--font-ui); font-size: 15px; font-weight: 600; }
+
+/* Site card */
+.card-body h3 { font-family: var(--font-display); font-size: 36px; font-weight: 700; line-height: .95; letter-spacing: .005em; }
+.card-status { font-size: 11px; letter-spacing: .04em; }
+.facts dd { font-size: 15px; }
+.gauge { display: grid; gap: 3px; }
+.gauge-track { position: relative; height: 10px; border-radius: 5px;
+  background: linear-gradient(to left, var(--d0), var(--d10) 33%, var(--d20) 66%, var(--d50)); }
+.gauge-range { position: absolute; top: -2px; bottom: -2px; border-radius: 4px; background: var(--ink); opacity: .85; }
+.gauge-limit { position: absolute; top: -5px; bottom: -5px; inset-inline-start: 50%; width: 2px; background: var(--survey); }
+.gauge-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+.gauge-scale .mid { color: var(--survey); font-weight: 600; }
+
+/* Modals */
+.modal h2 { font-family: var(--font-display); font-size: 40px; font-weight: 700; line-height: .95; }
+legend { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: .01em; padding-bottom: 6px; }
+
+/* Map tool switch uses the display face too */
+.map-tools .seg button { font-family: var(--font-display); font-size: 20px; font-weight: 700; padding: 4px 12px; letter-spacing: .01em; }
+.map-label.k-city { font-family: var(--font-display); font-size: 24px; letter-spacing: .02em; }
+.map-label.k-town { font-family: var(--font-display); font-size: 19px; font-weight: 700; }
+.cluster b { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+
+@media (max-width: 760px) {
+  .bar { height: 56px; }
+  .brand h1 { font-size: 28px; }
+  .count .big { font-size: 56px; }
+  .panel { --peek: 170px; }
+  .leaflet-bottom { bottom: 170px; }
+}
+
+/* Segmented choices in the survey form: big, thumb-sized targets */
+.segmented { display: flex; flex-wrap: wrap; width: 100%; }
+.segmented label { flex: 1; text-align: center; min-height: 44px; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.segmented.big label { min-height: 52px; font-size: var(--fs-md); }
+.segmented.nets label.yes:has(input:checked) { background: var(--st-nets); color: #fff; }
+.segmented label:has(input:focus-visible) { outline: 2px solid var(--survey); outline-offset: -2px; }
+#findings-wrap { margin-top: 12px; }

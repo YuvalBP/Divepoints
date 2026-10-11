@@ -552,6 +552,17 @@
     return `${d}.${m}.${y.slice(2)}`;
   }
 
+  // Site depth range on a 0–30 m scale, with the 15 m survey limit marked.
+  function depthGauge(d) {
+    if (!d) return "";
+    const pct = (v) => (Math.min(v, 30) / 30) * 100;
+    const a = pct(d[0]), b = pct(d[1]);
+    return `<div class="gauge" role="img" aria-label="טווח עומק ${d[0]}–${d[1]} מטר">
+      <div class="gauge-track"><span class="gauge-range" style="inset-inline-start:${a}%;width:${Math.max(b - a, 2)}%"></span><span class="gauge-limit"></span></div>
+      <div class="gauge-scale mono"><span>0</span><span class="mid">15 מ'</span><span>30+</span></div>
+    </div>`;
+  }
+
   function popupHtml(siteId) {
     const site = getSite(siteId);
     const status = siteStatus(siteId);
@@ -567,6 +578,7 @@
       <div class="card-status"><i></i>${STATUSES[status].label}${last ? ` · ${esc(fmtDate(last.date))}` : ""}</div>
       <div class="card-body">
         <div><div class="hint">${esc(cat.label)} · ${esc(REGIONS[site.region] || "")}</div><h3>${esc(site.name)}</h3></div>
+        ${depthGauge(site.depth)}
         <dl class="facts">
           <div><dt>עומק</dt><dd>${fmtDepth(site.depth)}</dd></div>
           <div><dt>במודל העומק</dt><dd>${model != null ? `~${model} מ'` : "—"}</dd></div>
@@ -610,10 +622,15 @@
     const counts = {};
     for (const s of all) { const k = siteStatus(s.id); counts[k] = (counts[k] || 0) + 1; }
     $("#done-count").textContent = all.length - (counts.unsurveyed || 0);
-    $("#done-of").textContent = `מתוך ${all.length} אתרים נסקרו`;
-    $("#stack").innerHTML = STATUS_ORDER.filter((k) => k !== "unsurveyed" && counts[k])
-      .map((k) => `<span style="width:${(100 * counts[k]) / all.length}%;background:var(--st-${k})"></span>`).join("");
-    $("#stack").setAttribute("aria-label", STATUS_ORDER.map((k) => `${STATUSES[k].label}: ${counts[k] || 0}`).join(", "));
+    $("#total-count").textContent = all.length;
+    // The coast as a barcode: one tick per site, north to south; colour is
+    // survey status, height is net risk.
+    const RISK_H = { high: 100, medium: 66, low: 40 };
+    $("#coastbar").innerHTML = all.slice().sort((a, b) => b.lat - a.lat).map((s) => {
+      const st = siteStatus(s.id);
+      return `<button class="tick s-${st}" data-id="${esc(s.id)}" style="--st:var(--st-${st});--h:${RISK_H[s.risk] || 55}%"
+        title="${esc(s.name)} · ${STATUSES[st].short}" aria-label="${esc(s.name)}, ${STATUSES[st].label}"></button>`;
+    }).join("");
     $("#status-chips").innerHTML = STATUS_ORDER.map((k) =>
       `<li><button class="chip" data-status="${k}" aria-pressed="${statusFilter === k}">
         <span class="sw" style="background:var(--st-${k})"></span>${STATUSES[k].short}<span class="n">${counts[k] || 0}</span>
@@ -691,6 +708,10 @@
       setTimeout(() => map.invalidateSize(), 50);
     });
     $("#panel-handle").addEventListener("click", () => $("#panel").classList.toggle("open"));
+    $("#coastbar").addEventListener("click", (e) => {
+      const b = e.target.closest(".tick");
+      if (b) focusSite(b.dataset.id);
+    });
   }
 
   // -------------------------------------------------------------- popup acts
@@ -865,15 +886,17 @@
         <fieldset><legend>פרטי הסקר</legend><div class="grid">
           <label class="field"><span>תאריך</span><input type="date" name="date" value="${esc(s.date)}" required></label>
           <label class="field"><span>שעת כניסה</span><input type="time" name="timeStart" value="${esc(s.timeStart)}"></label>
-          <label class="field"><span>סטטוס</span><select name="status">${opts(SURVEY_STATUS, s.status)}</select></label>
+          <div class="field wide"><span>סטטוס</span><div class="segmented" role="radiogroup" aria-label="סטטוס הסקר">
+            ${Object.entries(SURVEY_STATUS).map(([k, v]) => `<label><input type="radio" name="status" value="${k}"${s.status === k ? " checked" : ""}>${v}</label>`).join("")}
+          </div></div>
           <label class="field wide"><span>צוות / צוללים</span><input name="team" value="${esc(s.team)}" placeholder="שמות הצוללים, ראש צוות"></label>
           <label class="field wide" id="reason-field"><span>סיבה לאי ביצוע / ביצוע חלקי</span><input name="notDoneReason" value="${esc(s.notDoneReason)}" placeholder="למשל: ים גבוה, ראות אפסית, תקלה בציוד"></label>
         </div></fieldset>
 
         <fieldset><legend>ממצאים</legend>
-          <div class="row">
-            <label class="check"><input type="radio" name="netsFound" value="no"${s.netsFound === "no" ? " checked" : ""}> לא נמצאו רשתות / ציוד דיג</label>
-            <label class="check"><input type="radio" name="netsFound" value="yes"${s.netsFound === "yes" ? " checked" : ""}> נמצאו רשתות / ציוד דיג</label>
+          <div class="segmented big nets" role="radiogroup" aria-label="האם נמצאו רשתות">
+            <label><input type="radio" name="netsFound" value="no"${s.netsFound === "no" ? " checked" : ""}>לא נמצאו רשתות</label>
+            <label class="yes"><input type="radio" name="netsFound" value="yes"${s.netsFound === "yes" ? " checked" : ""}>נמצאו רשתות / ציוד דיג</label>
           </div>
           <div id="findings-wrap">
             <div id="findings">${s.findings.map(findingHtml).join("")}</div>

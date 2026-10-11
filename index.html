@@ -6,7 +6,7 @@
   <title>סקר רשתות רפאים</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Karantina:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -23,7 +23,7 @@
       </svg>
       <div>
         <h1>סקר רשתות רפאים</h1>
-        <p>ים התיכון · רצועת 0–15 מ'</p>
+        <p><bdi class="mono" dir="ltr">33°05′N – 31°33′N</bdi> · ים התיכון · 0–15 מ'</p>
       </div>
     </div>
     <div class="bar-actions">
@@ -40,11 +40,11 @@
       <button class="panel-handle" id="panel-handle" aria-label="הרחב או כווץ את הרשימה"><span></span></button>
       <section class="progress" aria-label="התקדמות הסקר">
         <div class="progress-head">
-          <span class="big" id="done-count">0</span>
-          <span class="of" id="done-of">מתוך 0 אתרים נסקרו</span>
-          <span id="sync" class="sync local"></span>
+          <div class="count"><span class="big" id="done-count">0</span><span class="slash">/</span><span class="total" id="total-count">0</span></div>
+          <div class="count-label"><b>אתרים נסקרו</b><span id="sync" class="sync local"></span></div>
         </div>
-        <div class="stack" id="stack" role="img"></div>
+        <div class="coastbar" id="coastbar" aria-label="כל האתרים לאורך החוף, מצפון לדרום"></div>
+        <div class="coastbar-ends" aria-hidden="true"><span>ראש הנקרה</span><span>צפון ← דרום</span><span>זיקים</span></div>
         <ul class="chips" id="status-chips"></ul>
       </section>
       <div class="panel-scroll">
