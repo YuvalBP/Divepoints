@@ -8,7 +8,7 @@ off to the east, islands are already closed rings.
 import json, sys
 
 TOL = 0.00004  # ~4 m simplification tolerance (degrees)
-EAST = 35.25
+EAST = 36.5
 
 def simplify(pts, tol):
     if len(pts) < 3:
@@ -47,7 +47,10 @@ for c in chains:
     if c[0] != c[-1]:
         # Open chain = mainland coast clipped by the bbox. Land is on the
         # left of travel; along the Israeli coast that is east.
-        c = c + [(c[-1][0], EAST), (c[0][0], EAST), c[0]]
+        # Run the chain ends past the map's bounds so no cut edge shows.
+        north, south = c[0], c[-1]
+        c = [(north[0] + 1.0, north[1])] + c + [(south[0] - 1.0, south[1] - 0.6),
+             (south[0] - 1.0, EAST), (north[0] + 1.0, EAST), (north[0] + 1.0, north[1])]
     s = simplify(c, TOL)
     if len(s) >= 4:
         polys.append([[round(lng, 5), round(lat, 5)] for lat, lng in s])

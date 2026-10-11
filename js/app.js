@@ -17,21 +17,33 @@
     north: "צפון", carmel: "חיפה והכרמל", sharon: "השרון", center: "גוש דן", south: "דרום",
   };
   const CATEGORIES = {
-    reef:        { label: "ריף / רכס סלעי", icon: "🪸" },
-    wreck:       { label: "ספינה טרופה",    icon: "⚓" },
-    pipe:        { label: "צינור / תשתית",  icon: "🛢" },
-    breakwater:  { label: "שובר גלים / נמל", icon: "🧱" },
-    archaeology: { label: "אתר ארכאולוגי",  icon: "🏛" },
-    island:      { label: "אי / סלע",        icon: "🏝" },
-    other:       { label: "אחר",             icon: "📍" },
+    reef:        { label: "ריף / רכס סלעי" },
+    wreck:       { label: "ספינה טרופה" },
+    pipe:        { label: "צינור / תשתית" },
+    breakwater:  { label: "שובר גלים / נמל" },
+    archaeology: { label: "אתר ארכאולוגי" },
+    island:      { label: "אי / סלע" },
+    other:       { label: "אחר" },
+  };
+  // Chart-style symbols (20x20 viewBox, stroked with currentColor).
+  const GLYPHS = {
+    reef: '<path d="M2.5 13.5l2.7-4 2.4 3 2.6-5.5 2.5 4.5 2.2-2.6 2.6 4.6"/>',
+    wreck: '<path d="M2.5 10h15M6.5 6.5v7M10 5v10M13.5 6.5v7"/>',
+    pipe: '<path d="M2 10h16"/><circle cx="6" cy="10" r="1.9" fill="currentColor"/><circle cx="14" cy="10" r="1.9" fill="currentColor"/>',
+    breakwater: '<path d="M2.5 8h15v4.5h-15z"/><path d="M5.5 12.5l3-4.5M9.5 12.5l3-4.5M13.5 12.5l3-4.5"/>',
+    archaeology: '<path d="M4.5 5h11M4.5 15.5h11M7.5 5.5v9.5M12.5 5.5v9.5"/>',
+    island: '<path d="M10 3.5v13M3.5 10h13"/><circle cx="5.8" cy="5.8" r="1" fill="currentColor"/><circle cx="14.2" cy="5.8" r="1" fill="currentColor"/><circle cx="5.8" cy="14.2" r="1" fill="currentColor"/><circle cx="14.2" cy="14.2" r="1" fill="currentColor"/>',
+    other: '<circle cx="10" cy="10" r="3.5"/>',
   };
   const STATUSES = {
-    unsurveyed: { label: "טרם נסקר",          color: "var(--st-unsurveyed)", hex: "#8a96a3" },
-    clean:      { label: "נסקר – ללא ממצאים", color: "var(--st-clean)",      hex: "#2e9d5b" },
-    nets:       { label: "נסקר – נמצאו רשתות", color: "var(--st-nets)",       hex: "#d23a3a" },
-    partial:    { label: "נסקר חלקית",        color: "var(--st-partial)",    hex: "#e88b1a" },
-    aborted:    { label: "לא בוצע (בוטל)",    color: "var(--st-aborted)",    hex: "#7a5cc4" },
+    unsurveyed: { label: "טרם נסקר",           short: "טרם נסקר" },
+    clean:      { label: "נסקר – ללא ממצאים",  short: "נקי" },
+    nets:       { label: "נסקר – נמצאו רשתות", short: "רשתות" },
+    partial:    { label: "נסקר חלקית",         short: "חלקי" },
+    aborted:    { label: "לא בוצע (בוטל)",     short: "בוטל" },
   };
+  // Display order: what needs attention first.
+  const STATUS_ORDER = ["nets", "partial", "clean", "aborted", "unsurveyed"];
   const RISK = { high: "גבוה", medium: "בינוני", low: "נמוך" };
 
   const SURVEY_STATUS = { done: "בוצע", partial: "בוצע חלקית", "not-done": "לא בוצע" };
@@ -128,7 +140,7 @@
   function setSyncBadge() {
     const el = $("#sync");
     if (!el) return;
-    el.textContent = db ? "● נתונים משותפים לכל הצוות" : "● נשמר במכשיר הזה בלבד";
+    el.textContent = db ? "משותף לכל הצוות" : "נשמר במכשיר הזה בלבד";
     el.className = "sync " + (db ? "shared" : "local");
   }
 
@@ -221,8 +233,30 @@
   }
 
   // ---------------------------------------------------------------------- map
+  // Current value of a CSS custom property (SVG/canvas styles cannot use var()).
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const BAND_VAR = { 0: "--d0", 5: "--d5", 10: "--d10", 15: "--d15", 20: "--d20", 30: "--d30", 50: "--d50", 100: "--d100" };
+  const POPUP_OPTS = { maxWidth: 300, minWidth: 290, autoPanPaddingTopLeft: [16, 64], autoPanPaddingBottomRight: [16, 64] };
+  let clusterLayer, linesLayer, chartLayers, isoLabels, chartOn = true;
+
+  function bathyStyle(f) {
+    const p = f.properties;
+    if (p.kind === "band") return { stroke: false, fillOpacity: 1, fillColor: css(BAND_VAR[p.min] || "--deep") };
+    return { color: css("--isobath"), weight: p.depth <= 10 ? 0.5 : 0.8, opacity: 0.75, dashArray: p.depth <= 10 ? "3 3" : null };
+  }
+  function landStyle() { return { color: css("--land-edge"), weight: 0.8, fillColor: css("--land"), fillOpacity: 1 }; }
+  function surveyStyle() { return { color: css("--survey"), weight: 2.4, opacity: 0.95 }; }
+
   function initMap() {
-    map = L.map("map", { zoomControl: true }).setView([32.55, 34.9], 9);
+    map = L.map("map", {
+      zoomControl: false, minZoom: 8, maxZoom: 18,
+      // Keep the view on the charted coast (data covers 31.5–33.15 N).
+      maxBounds: [[31.3, 33.9], [33.35, 35.7]], maxBoundsViscosity: 0.8,
+    }).setView([32.55, 34.9], 9);
+    map.attributionControl.setPrefix(false);
+    L.control.zoom({ position: "topleft", zoomInTitle: "התקרב", zoomOutTitle: "התרחק" }).addTo(map);
+    map.createPane("chart").style.zIndex = 250;
+    map.createPane("surveyLine").style.zIndex = 420;
 
     const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
@@ -230,81 +264,176 @@
     const sat = L.tileLayer(
       "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       { maxZoom: 19, attribution: "Imagery &copy; Esri" });
-    const ocean = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 13, attribution: "&copy; Esri, GEBCO, NOAA" });
     const seamarks = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
       maxZoom: 18, attribution: "&copy; OpenSeaMap",
     });
 
-    // Built-in basemap: land polygons from OSM coastline. Works offline
-    // and wherever map tiles are blocked.
-    const land = L.layerGroup();
-    if (window.COAST_LAND) {
-      L.geoJSON(window.COAST_LAND, {
-        interactive: false,
-        style: { color: "#a8956c", weight: 1, fillColor: "#ece3cf", fillOpacity: 1 },
-        attribution: "קו חוף &copy; OpenStreetMap contributors",
-      }).addTo(land);
-    }
+    // Nautical chart from bundled data: depth bands and isobaths
+    // (EMODnet) under land polygons (OSM). Works offline and wherever
+    // map tiles are blocked.
+    const canvas = L.canvas({ pane: "chart", padding: 0.3 });
+    const feats = (window.BATHY && window.BATHY.features) || [];
+    const bathy = L.geoJSON({ type: "FeatureCollection", features: feats.filter((f) => !(f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT)) },
+      { renderer: canvas, interactive: false, style: bathyStyle, attribution: "עומקים &copy; EMODnet Bathymetry" });
+    const land = L.geoJSON(window.COAST_LAND || null,
+      { renderer: canvas, interactive: false, style: landStyle, attribution: "קו חוף &copy; OpenStreetMap contributors" });
+    const chart = L.layerGroup([bathy, land]);
+    chartLayers = { bathy, land };
 
-    markersLayer = L.layerGroup();
+    // The 15 m isobath: the outer edge of the survey belt, on every base map.
+    const surveyLine = L.geoJSON({ type: "FeatureCollection", features: feats.filter((f) => f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT) },
+      { pane: "surveyLine", interactive: false, style: surveyStyle });
+    chartLayers.surveyLine = surveyLine;
+
+    // Depth figures along the isobaths, chart style; shown from zoom 11.
+    isoLabels = L.layerGroup();
+    for (const f of feats) {
+      const d = f.properties.depth;
+      if (f.properties.kind !== "isobath" || d > 100) continue;
+      const cs = f.geometry.coordinates;
+      if (cs.length < 12) continue;
+      const step = Math.max(30, Math.floor(cs.length / 3));
+      for (let i = Math.floor(step / 2); i < cs.length; i += step) {
+        isoLabels.addLayer(L.marker([cs[i][1], cs[i][0]], {
+          interactive: false, keyboard: false,
+          icon: L.divIcon({ className: "iso-label" + (d === SHALLOW_LIMIT ? " survey" : ""), html: String(d), iconSize: [22, 12], iconAnchor: [11, 6] }),
+        }));
+      }
+    }
+    const syncLabels = () => {
+      const show = chartOn && map.getZoom() >= 11;
+      if (show && !map.hasLayer(isoLabels)) isoLabels.addTo(map);
+      if (!show && map.hasLayer(isoLabels)) map.removeLayer(isoLabels);
+    };
+    map.on("zoomend", syncLabels);
+
+    linesLayer = L.layerGroup();
+    clusterLayer = L.markerClusterGroup
+      ? L.markerClusterGroup({
+          showCoverageOnHover: false, maxClusterRadius: 46, disableClusteringAtZoom: 13,
+          spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
+        })
+      : L.featureGroup();
     routesLayer = L.layerGroup();
     tempLayer = L.layerGroup();
 
-    if (IN_CLAUDE) {
-      map.getContainer().classList.add("sea");
-      land.addTo(map);
-      L.control.layers(
-        { "מפה מובנית (קו חוף)": land },
-        { "מסלולי סקרים": routesLayer },
-        { position: "topleft" }
-      ).addTo(map);
-    } else {
-      sat.addTo(map);
-      L.control.layers(
-        { "תצלום אוויר": sat, "מפת רחובות": osm, "מפה ימית (עומקים)": ocean, "מפה מובנית (ללא אינטרנט)": land },
-        { "סימוני ים (OpenSeaMap)": seamarks, "מסלולי סקרים": routesLayer },
-        { position: "topleft" }
-      ).addTo(map);
-      map.on("baselayerchange", (e) => map.getContainer().classList.toggle("sea", e.layer === land));
+    chart.addTo(map);
+    const bases = { "מפה ימית": chart };
+    const overlays = { "גבול רצועת הסקר (15 מ')": surveyLine, "מסלולי סקרים וממצאים": routesLayer };
+    if (!IN_CLAUDE) {
+      bases["תצלום אוויר"] = sat;
+      bases["מפת רחובות"] = osm;
+      overlays["סימוני ים (OpenSeaMap)"] = seamarks;
     }
-    markersLayer.addTo(map);
+    L.control.layers(bases, overlays, { position: "topleft" }).addTo(map);
+    map.on("baselayerchange", (e) => { chartOn = e.layer === chart; syncLabels(); });
+
+    surveyLine.addTo(map);
+    linesLayer.addTo(map);
+    clusterLayer.addTo(map);
     routesLayer.addTo(map);
     tempLayer.addTo(map);
+    addLegend();
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
+    syncLabels();
 
     map.on("click", onMapClick);
+
+    // Follow theme switches (system setting or the viewer's own toggle).
+    const restyle = () => {
+      chartLayers.bathy.setStyle(bathyStyle);
+      chartLayers.land.setStyle(landStyle);
+      chartLayers.surveyLine.setStyle(surveyStyle);
+      renderMap();
+    };
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", restyle);
+    new MutationObserver(restyle).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
-  function markerIcon(site, status) {
-    const st = STATUSES[status];
-    const cat = CATEGORIES[site.category] || CATEGORIES.other;
+  function addLegend() {
+    const Legend = L.Control.extend({
+      options: { position: "bottomleft" },
+      onAdd() {
+        const el = L.DomUtil.create("details", "legend");
+        if (!window.matchMedia("(max-width: 760px)").matches) el.open = true;
+        const depths = [0, 5, 10, 15, 20, 30, 50, 100];
+        el.innerHTML = `<summary>מקרא</summary>
+          <div class="ramp">${depths.map((d) => `<span style="background:var(${BAND_VAR[d]})"></span>`).join("")}</div>
+          <div class="ramp-labels">${depths.map((d) => `<span>${d}</span>`).join("")}</div>
+          <div class="row"><span class="survey-line"></span>15 מ' · גבול רצועת הסקר</div>
+          <div class="marks">${STATUS_ORDER.map((k) => `<span><i style="background:var(--st-${k});border:1.5px solid var(--st-unsurveyed-ink)"></i>${STATUSES[k].short}</span>`).join("")}
+            <span><i style="background:var(--survey)"></i>סיכון גבוה</span></div>
+          <div class="note">עומקים במטרים, EMODnet (~115 מ'). לא לניווט.</div>`;
+        L.DomEvent.disableClickPropagation(el);
+        L.DomEvent.disableScrollPropagation(el);
+        return el;
+      },
+    });
+    new Legend().addTo(map);
+  }
+
+  // Cluster badge: a ring split by survey status, so progress reads from
+  // the overview without zooming in.
+  function clusterIcon(cluster) {
+    const kids = cluster.getAllChildMarkers();
+    const counts = {};
+    for (const m of kids) counts[m.options.status] = (counts[m.options.status] || 0) + 1;
+    const n = kids.length;
+    const size = n < 6 ? 40 : n < 15 ? 46 : 52;
+    const r = size / 2 - 4, c = 2 * Math.PI * r;
+    let offset = 0;
+    const arcs = STATUS_ORDER.map((k) => {
+      if (!counts[k]) return "";
+      const len = (counts[k] / n) * c;
+      const stroke = k === "unsurveyed" ? "var(--rule)" : `var(--st-${k})`;
+      const arc = `<circle r="${r}" cx="${size / 2}" cy="${size / 2}" fill="none" style="stroke:${stroke}" stroke-width="6"
+        stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+      offset += len;
+      return arc;
+    }).join("");
+    const label = STATUS_ORDER.filter((k) => counts[k]).map((k) => `${STATUSES[k].short} ${counts[k]}`).join(", ");
     return L.divIcon({
       className: "",
-      html: `<div class="site-marker${site.verified || site.src === "osm" ? "" : " unverified"}" style="background:${st.hex}" title="${esc(site.name)}">${cat.icon}</div>`,
-      iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -12],
+      html: `<div class="cluster" title="${esc(label)}"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <circle r="${r + 3}" cx="${size / 2}" cy="${size / 2}" style="fill:var(--panel)"/>${arcs}</svg><b>${n}</b></div>`,
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2],
     });
   }
 
-  function renderMap() {
-    markersLayer.clearLayers();
-    for (const k in markerById) delete markerById[k];
-    const visible = new Set(filteredSites().map((s) => s.id));
+  function glyph(category) {
+    const g = GLYPHS[category] || GLYPHS.other;
+    return `<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${g}</svg>`;
+  }
+  function isEstimate(site) { return !(site.verified || site.src === "osm"); }
+  function markHtml(site, status, extraClass) {
+    const cls = ["site-marker", "s-" + status];
+    if (isEstimate(site)) cls.push("est");
+    if (site.risk === "high" && status === "unsurveyed") cls.push("risk-high");
+    if (extraClass) cls.push(extraClass);
+    return `<div class="${cls.join(" ")}" style="--st:var(--st-${status})">${glyph(site.category)}</div>`;
+  }
 
-    for (const site of allSites()) {
-      if (!visible.has(site.id)) continue;
+  function renderMap() {
+    clusterLayer.clearLayers();
+    linesLayer.clearLayers();
+    for (const k in markerById) delete markerById[k];
+    const markers = [];
+    for (const site of filteredSites()) {
       const status = siteStatus(site.id);
       if (site.line) {
-        L.polyline(site.line, { color: STATUSES[status].hex, weight: 5, opacity: 0.85, dashArray: site.verified || site.src === "osm" ? null : "8 6" })
-          .bindPopup(() => popupHtml(site.id))
-          .addTo(markersLayer);
+        L.polyline(site.line, {
+          color: css(status === "unsurveyed" ? "--st-unsurveyed-ink" : `--st-${status}`),
+          weight: 5, opacity: 0.9, lineCap: "round", dashArray: isEstimate(site) ? "8 6" : null,
+        }).bindPopup(() => popupHtml(site.id), POPUP_OPTS).addTo(linesLayer);
       }
-      const m = L.marker([site.lat, site.lng], { icon: markerIcon(site, status) })
-        .bindPopup(() => popupHtml(site.id), { maxWidth: 300 })
-        .addTo(markersLayer);
+      const m = L.marker([site.lat, site.lng], {
+        status, title: site.name, riseOnHover: true,
+        icon: L.divIcon({ className: "", html: markHtml(site, status), iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -14] }),
+      }).bindPopup(() => popupHtml(site.id), POPUP_OPTS);
       markerById[site.id] = m;
+      markers.push(m);
     }
+    if (clusterLayer.addLayers) clusterLayer.addLayers(markers); else markers.forEach((m) => clusterLayer.addLayer(m));
     renderRoutes();
   }
 
@@ -312,18 +441,29 @@
     routesLayer.clearLayers();
     for (const s of state.surveys) {
       if (s.route && s.route.length > 1) {
-        L.polyline(s.route, { color: "#ffd400", weight: 3, opacity: 0.9 })
-          .bindTooltip(`${esc((getSite(s.siteId) || {}).name || "")} · ${esc(s.date)}`)
+        L.polyline(s.route, { color: css("--survey"), weight: 3, opacity: 0.95, dashArray: "1 6", lineCap: "round" })
+          .bindTooltip(`${esc((getSite(s.siteId) || {}).name || "")} · ${esc(fmtDate(s.date))}`)
           .addTo(routesLayer);
       }
       for (const f of s.findings || []) {
         if (f.lat != null) {
-          L.circleMarker([f.lat, f.lng], { radius: 6, color: "#fff", weight: 2, fillColor: "#d23a3a", fillOpacity: 1 })
+          L.circleMarker([f.lat, f.lng], { radius: 6, color: css("--panel"), weight: 2, fillColor: css("--st-nets"), fillOpacity: 1 })
             .bindTooltip(`ממצא: ${esc(FINDING_TYPES[f.type] || f.type)}`)
             .addTo(routesLayer);
         }
       }
     }
+  }
+
+  // Degrees and decimal minutes, as on a boat GPS: 32°06.576′N
+  function ddm(v, pos, neg, degDigits) {
+    const a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
+    return `${String(d).padStart(degDigits, "0")}°${m.toFixed(3).padStart(6, "0")}′${v >= 0 ? pos : neg}`;
+  }
+  function fmtDate(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y.slice(2)}`;
   }
 
   function popupHtml(siteId) {
@@ -332,93 +472,139 @@
     const surveys = surveysFor(siteId);
     const last = surveys[0];
     const cat = CATEGORIES[site.category] || CATEGORIES.other;
+    const moved = state.siteEdits[site.id] && state.siteEdits[site.id].lat != null;
+    const model = !site.custom && !moved && window.GRID_DEPTH ? window.GRID_DEPTH[site.id] : null;
+    const src = site.verified ? "מאומת בשטח" : site.src === "osm" ? "לפי OpenStreetMap" : "מיקום משוער";
     const gmaps = `https://www.google.com/maps/search/?api=1&query=${site.lat},${site.lng}`;
-    return `<div class="popup">
-      <h3>${cat.icon} ${esc(site.name)}</h3>
-      <div class="meta">${esc(cat.label)} · ${esc(REGIONS[site.region] || "")} · עומק ${fmtDepth(site.depth)} · סיכון ${esc(RISK[site.risk] || "—")}</div>
-      <span class="badge" style="background:${STATUSES[status].hex}">${STATUSES[status].label}</span>
-      <p>${esc(site.desc || "")}</p>
-      ${site.verified ? "" : site.src === "osm"
-        ? `<div class="warn">📍 מיקום לפי OpenStreetMap – מומלץ לאמת בשטח</div>`
-        : `<div class="warn">⚠ מיקום משוער – יש לאמת בשטח (ניתן לגרור עם "תקן מיקום")</div>`}
-      ${last ? `<div class="meta">סקר אחרון: ${esc(last.date)} · ${esc(SURVEY_STATUS[last.status])} · סה"כ ${surveys.length} סקרים</div>` : ""}
-      <div class="meta">${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}</div>
-      <div class="actions">
-        <button class="btn small" data-act="new-survey" data-id="${esc(site.id)}">+ סקר חדש</button>
-        <button class="btn btn-ghost small" data-act="history" data-id="${esc(site.id)}">היסטוריה (${surveys.length})</button>
-        <button class="btn btn-ghost small" data-act="move" data-id="${esc(site.id)}">תקן מיקום</button>
-        ${site.verified ? "" : `<button class="btn btn-ghost small" data-act="verify" data-id="${esc(site.id)}">אשר מיקום</button>`}
-        <a class="btn btn-ghost small" href="${gmaps}" target="_blank" rel="noopener">ניווט</a>
-        ${site.custom ? `<button class="btn btn-ghost small" data-act="edit-site" data-id="${esc(site.id)}">ערוך</button>` : ""}
+    const id = esc(site.id);
+    return `<div style="--st:var(--st-${status})">
+      <div class="card-status"><i></i>${STATUSES[status].label}${last ? ` · ${esc(fmtDate(last.date))}` : ""}</div>
+      <div class="card-body">
+        <div><div class="hint">${esc(cat.label)} · ${esc(REGIONS[site.region] || "")}</div><h3>${esc(site.name)}</h3></div>
+        <dl class="facts">
+          <div><dt>עומק</dt><dd>${fmtDepth(site.depth)}</dd></div>
+          <div><dt>במודל העומק</dt><dd>${model != null ? `~${model} מ'` : "—"}</dd></div>
+          <div><dt>סיכון</dt><dd>${esc(RISK[site.risk] || "—")}</dd></div>
+        </dl>
+        <p>${esc(site.desc || "")}</p>
+        ${isEstimate(site) ? `<div class="warn">מיקום משוער. בסקר הראשון גררו את הנקודה למקום הנכון ("תקן מיקום").</div>` : ""}
+        <div class="coords"><span>${ddm(site.lat, "N", "S", 2)} ${ddm(site.lng, "E", "W", 3)}</span><span class="src">${src}</span></div>
+        <div class="card-actions">
+          <button class="btn btn-primary small" data-act="new-survey" data-id="${id}">סקר חדש</button>
+          <button class="btn small" data-act="history" data-id="${id}">היסטוריה · ${surveys.length}</button>
+          <a class="btn btn-ghost small" href="${gmaps}" target="_blank" rel="noopener">ניווט</a>
+        </div>
+        <div class="card-actions more">
+          <button class="btn btn-ghost small" data-act="move" data-id="${id}">תקן מיקום</button>
+          ${site.verified ? "" : `<button class="btn btn-ghost small" data-act="verify" data-id="${id}">אשר מיקום</button>`}
+          ${site.custom ? `<button class="btn btn-ghost small" data-act="edit-site" data-id="${id}">ערוך אתר</button>` : ""}
+        </div>
       </div>
     </div>`;
   }
 
   // ----------------------------------------------------------------- sidebar
+  let statusFilter = "";
+
   function filteredSites() {
     const q = $("#search").value.trim();
     const region = $("#filter-region").value;
     const cat = $("#filter-category").value;
-    const st = $("#filter-status").value;
     const shallow = $("#filter-shallow").checked;
     return allSites().filter((s) =>
       (!q || s.name.includes(q) || (s.desc || "").includes(q)) &&
       (!region || s.region === region) &&
       (!cat || s.category === cat) &&
-      (!st || siteStatus(s.id) === st) &&
+      (!statusFilter || siteStatus(s.id) === statusFilter) &&
       (!shallow || !s.depth || s.depth[0] <= SHALLOW_LIMIT));
   }
 
   function renderSidebar() {
-    const sites = filteredSites();
     const all = allSites();
     const counts = {};
     for (const s of all) { const k = siteStatus(s.id); counts[k] = (counts[k] || 0) + 1; }
-    const surveyed = all.length - (counts.unsurveyed || 0);
-    $("#stats").innerHTML = `
-      <div class="stat"><b>${all.length}</b><span>אתרים</span></div>
-      <div class="stat"><b>${surveyed}</b><span>נסקרו</span></div>
-      <div class="stat"><b style="color:${STATUSES.nets.hex}">${counts.nets || 0}</b><span>עם רשתות</span></div>`;
+    $("#done-count").textContent = all.length - (counts.unsurveyed || 0);
+    $("#done-of").textContent = `מתוך ${all.length} אתרים נסקרו`;
+    $("#stack").innerHTML = STATUS_ORDER.filter((k) => k !== "unsurveyed" && counts[k])
+      .map((k) => `<span style="width:${(100 * counts[k]) / all.length}%;background:var(--st-${k})"></span>`).join("");
+    $("#stack").setAttribute("aria-label", STATUS_ORDER.map((k) => `${STATUSES[k].label}: ${counts[k] || 0}`).join(", "));
+    $("#status-chips").innerHTML = STATUS_ORDER.map((k) =>
+      `<li><button class="chip" data-status="${k}" aria-pressed="${statusFilter === k}">
+        <span class="sw" style="background:var(--st-${k})"></span>${STATUSES[k].short}<span class="n">${counts[k] || 0}</span>
+      </button></li>`).join("");
 
-    $("#site-list").innerHTML = sites.map((s) => {
-      const st = siteStatus(s.id);
-      const cat = CATEGORIES[s.category] || CATEGORIES.other;
-      return `<li data-id="${esc(s.id)}">
-        <span class="dot" style="background:${STATUSES[st].hex}"></span>
-        <div><div class="name">${cat.icon} ${esc(s.name)}</div>
-        <div class="meta">${esc(REGIONS[s.region] || "")} · ${fmtDepth(s.depth)} · ${STATUSES[st].label}</div></div>
-      </li>`;
-    }).join("") || `<li class="meta">אין אתרים תואמים</li>`;
+    const sites = filteredSites();
+    if (!sites.length) {
+      $("#site-list").innerHTML = `<div class="empty">אין אתרים שמתאימים לסינון.<br><br><button class="btn small" id="clear-filters">נקה סינון</button></div>`;
+      return;
+    }
+    const html = [];
+    for (const [rk, rname] of Object.entries(REGIONS)) {
+      const group = sites.filter((s) => s.region === rk).sort((a, b) => b.lat - a.lat);
+      if (!group.length) continue;
+      html.push(`<h2 class="group"><span>${esc(rname)}</span><span class="n">${group.length}</span></h2><ul class="site-list">`);
+      for (const s of group) {
+        const st = siteStatus(s.id);
+        const last = surveysFor(s.id)[0];
+        const cat = CATEGORIES[s.category] || CATEGORIES.other;
+        html.push(`<li data-id="${esc(s.id)}" tabindex="0">
+          ${markHtml(s, st, "list-mark")}
+          <div class="txt"><div class="name">${esc(s.name)}</div>
+            <div class="meta"><span class="mono">${fmtDepth(s.depth)}</span><span>${esc(cat.label)}</span>${isEstimate(s) ? `<span class="tag-est">≈ מיקום משוער</span>` : ""}</div></div>
+          <div class="when mono">${last ? esc(fmtDate(last.date)) : ""}</div>
+        </li>`);
+      }
+      html.push(`</ul>`);
+    }
+    $("#site-list").innerHTML = html.join("");
   }
 
   function renderAll() { renderSidebar(); renderMap(); }
 
+  function isPhone() { return window.matchMedia("(max-width: 760px)").matches; }
+
+  function focusSite(id) {
+    const m = markerById[id];
+    if (!m) return;
+    if (isPhone()) $("#panel").classList.remove("open");
+    map.setView(m.getLatLng(), Math.max(map.getZoom(), 14));
+    setTimeout(() => m.openPopup(), 400);
+  }
+
   function initSidebar() {
     $("#filter-category").innerHTML += Object.entries(CATEGORIES)
-      .map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join("");
-    $("#filter-status").innerHTML += Object.entries(STATUSES)
       .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
-    $("#legend").innerHTML = Object.values(STATUSES)
-      .map((v) => `<span><i style="background:${v.hex}"></i>${v.label}</span>`).join("") +
-      `<span>מסגרת מקווקוות = מיקום משוער</span>`;
 
-    ["#search", "#filter-region", "#filter-category", "#filter-status", "#filter-shallow"].forEach((sel) =>
+    ["#search", "#filter-region", "#filter-category", "#filter-shallow"].forEach((sel) =>
       $(sel).addEventListener("input", renderAll));
 
-    $("#site-list").addEventListener("click", (e) => {
-      const li = e.target.closest("li[data-id]");
-      if (!li) return;
-      const site = getSite(li.dataset.id);
-      map.setView([site.lat, site.lng], Math.max(map.getZoom(), 15));
-      setTimeout(() => markerById[site.id] && markerById[site.id].openPopup(), 300);
-      if (window.innerWidth <= 760) $("#sidebar").classList.add("collapsed");
+    $("#status-chips").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-status]");
+      if (!b) return;
+      statusFilter = statusFilter === b.dataset.status ? "" : b.dataset.status;
+      renderAll();
     });
 
-    $("#toggle-sidebar").addEventListener("click", () => {
-      $("#sidebar").classList.toggle("collapsed");
+    $("#site-list").addEventListener("click", (e) => {
+      if (e.target.closest("#clear-filters")) {
+        statusFilter = ""; $("#search").value = ""; $("#filter-region").value = "";
+        $("#filter-category").value = ""; $("#filter-shallow").checked = false;
+        renderAll();
+        return;
+      }
+      const li = e.target.closest("li[data-id]");
+      if (li) focusSite(li.dataset.id);
+    });
+    $("#site-list").addEventListener("keydown", (e) => {
+      const li = e.target.closest("li[data-id]");
+      if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); focusSite(li.dataset.id); }
+    });
+
+    $("#toggle-panel").addEventListener("click", () => {
+      $("#panel").classList.toggle("collapsed");
       setTimeout(() => map.invalidateSize(), 50);
     });
-    if (window.innerWidth <= 760) $("#sidebar").classList.add("collapsed");
+    $("#panel-handle").addEventListener("click", () => $("#panel").classList.toggle("open"));
   }
 
   // -------------------------------------------------------------- popup acts
@@ -448,8 +634,10 @@
     const site = getSite(id);
     const m = markerById[id];
     if (!m) return;
-    m.dragging.enable();
     const original = m.getLatLng();
+    // Zoom past the clustering threshold so the marker itself is on the map.
+    map.setView(original, Math.max(map.getZoom(), 15));
+    setTimeout(() => m.dragging && m.dragging.enable(), 450);
     setDrawMode({ type: "move", siteId: id }, `גרור את "${site.name}" למיקום הנכון ולחץ סיום`, {
       done: () => {
         const ll = m.getLatLng();
@@ -457,7 +645,7 @@
         renderAll();
         toast("המיקום עודכן");
       },
-      cancel: () => { m.setLatLng(original); m.dragging.disable(); },
+      cancel: () => { m.setLatLng(original); if (m.dragging) m.dragging.disable(); },
       noUndo: true,
     });
   }
@@ -833,7 +1021,7 @@
       ${list.length ? "" : "<p>טרם בוצעו סקרים באתר זה.</p>"}
       ${list.map((s) => `<div class="survey-item">
         <div class="row"><b>${esc(s.date)} ${esc(s.timeStart || "")}</b>
-          <span class="badge" style="background:${STATUSES[surveyStatusKey(s)].hex}">${esc(SURVEY_STATUS[s.status])}${s.netsFound === "yes" ? " · נמצאו רשתות" : ""}</span>
+          <span class="badge" style="background:var(--st-${surveyStatusKey(s)})">${esc(SURVEY_STATUS[s.status])}${s.netsFound === "yes" ? " · נמצאו רשתות" : ""}</span>
         </div>
         <dl>
           <dt>צוות</dt><dd>${v(s.team)}</dd>

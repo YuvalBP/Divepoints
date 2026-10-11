@@ -32,6 +32,7 @@ def leaflet_css():
 def main():
     html = (ROOT / "index.html").read_text()
     title = re.search(r"<title>.*?</title>", html).group(0)
+    fonts = "\n".join(re.findall(r'<link[^>]+fonts\.(?:googleapis|gstatic)\.com[^>]*>', html))
     body = re.search(r"<body>(.*)</body>", html, re.S).group(1)
 
     def inline_script(m):
@@ -43,7 +44,7 @@ def main():
     body = re.sub(r'<script src="([^"]+)"></script>', inline_script, body)
 
     css = leaflet_css() + "\n" + (ROOT / "css/style.css").read_text()
-    page = f"{title}\n<style>\n{css}\n</style>\n{body.strip()}\n"
+    page = f"{title}\n{fonts}\n<style>\n{css}\n</style>\n{body.strip()}\n"
     out = ROOT / "dist/divepoints.html"
     out.parent.mkdir(exist_ok=True)
     out.write_text(page)
