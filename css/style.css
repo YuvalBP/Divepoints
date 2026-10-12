@@ -699,3 +699,18 @@ body.is-owner .owner-only, body.signed-in .signed-only { display: block; }
   .draw-bar { bottom: calc(58px + 12px + env(safe-area-inset-bottom, 0px)); }
   .toast { bottom: calc(58px + 12px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Depth probe (long press / right click) */
+.probe-popup .leaflet-popup-content { width: auto !important; }
+.probe { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; padding: 14px; align-items: center; }
+.probe-num { display: flex; align-items: baseline; gap: 3px; font-family: var(--font-display); line-height: .85; }
+.probe-num b { font-size: 58px; font-weight: 400; }
+.probe-num span { font-size: 22px; color: var(--muted); }
+.probe-where { font-weight: 700; font-size: var(--fs-sm); }
+.probe-where.in { color: var(--survey); }
+.probe .card-actions { grid-column: 1 / -1; }
+.probe .coords { margin-top: 4px; }
+.probe { grid-template-columns: auto 1fr; padding-inline-end: 34px; }
+.probe-wide { grid-column: 1 / -1; }
+.probe-where { font-size: var(--fs-md); line-height: 1.25; }
+.probe-popup .leaflet-popup-content { width: min(280px, calc(100vw - 48px)) !important; }

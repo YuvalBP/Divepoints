@@ -123,9 +123,28 @@ for sid, la, lo in re.findall(r'id: "([^"]+)".*?lat: ([\d.]+), lng: ([\d.]+)', s
     if sea.size:
         grid[sid] = round(float(np.median(sea)), 1)  # median resists stray cells
 
+# Compact depth grid of the shelf (0-60 m) for "depth at this point" in the
+# app: per row, the column span holding shelf cells, as bytes of depth*4
+# (0.25 m steps); 254 = deeper than MAX_D, 255 = land.
+import base64
+MAX_D = 60
+rows = []
+for r in range(raw.shape[0]):
+    row = raw[r]
+    idx = np.where((row > 0) & (row <= MAX_D))[0]
+    if not idx.size:
+        rows.append(None)
+        continue
+    c0, c1 = int(idx[0]), int(idx[-1])
+    seg = row[c0:c1 + 1]
+    vals = np.where(seg <= 0, 255, np.where(seg > MAX_D, 254, np.round(seg * 4))).astype(np.uint8)
+    rows.append([c0, base64.b64encode(vals.tobytes()).decode()])
+depth_grid = {"lon0": LON0, "lat1": LAT1, "res": RES, "max": MAX_D, "rows": rows}
+
 out = {"type": "FeatureCollection", "features": feats}
 print("/* Depth bands and isobaths derived from EMODnet Bathymetry (DTM, 1/16 arc-minute).")
 print(" * Shallow contours are approximate. Not for navigation. */")
 print("window.BATHY = " + json.dumps(out, separators=(",", ":")) + ";")
 print("window.GRID_DEPTH = " + json.dumps(grid, separators=(",", ":")) + ";")
+print("window.DEPTH_GRID = " + json.dumps(depth_grid, separators=(",", ":")) + ";")
 print(f"features={len(feats)}", file=sys.stderr)

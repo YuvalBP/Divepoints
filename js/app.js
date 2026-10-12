@@ -569,6 +569,7 @@
     };
     map.on("zoomend", syncZoom);
     map.on("click", onMapClick);
+    map.on("contextmenu", (e) => showDepthProbe(e.latlng));
     // On phones the tool column would cover the site card; hide it meanwhile.
     map.on("popupopen", () => map.getContainer().classList.add("popup-open"));
     map.on("popupclose", () => map.getContainer().classList.remove("popup-open"));
@@ -683,7 +684,7 @@
                 <span><i class="est"></i>מיקום משוער</span></div>
               <div class="ramp-wrap"><div class="ramp">${[0, 5, 10, 15, 20, 30, 50, 100].map((d) => `<span style="background:var(${BAND_VAR[d]})"></span>`).join("")}</div>
               <div class="ramp-labels">${[0, 5, 10, 15, 20, 30, 50, 100].map((d) => `<span>${d}</span>`).join("")}</div></div>
-              <div class="note">עומקים: EMODnet (~115 מ'), הערכה בלבד. לא לניווט.</div>
+              <div class="note"><b>לחיצה ארוכה על המפה</b> (או קליק ימני) מציגה את העומק המשוער בנקודה.<br>עומקים: EMODnet (~115 מ'), הערכה בלבד. לא לניווט.</div>
             </div>
           </details>`;
         L.DomEvent.disableClickPropagation(el);
@@ -1091,6 +1092,42 @@
     document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) menu.open = false; });
   }
 
+  // ------------------------------------------------------------ depth probe
+  // Model depth at a point from the bundled shelf grid (EMODnet, ~115 m).
+  // Returns metres, Infinity when deeper than the grid keeps, null on land
+  // or outside the charted coast.
+  const depthRowCache = {};
+  function depthAt(lat, lng) {
+    const g = window.DEPTH_GRID;
+    if (!g) return null;
+    const r = Math.floor((g.lat1 - lat) / g.res), c = Math.floor((lng - g.lon0) / g.res);
+    const row = g.rows[r];
+    if (!row) return null;
+    if (!depthRowCache[r]) depthRowCache[r] = Uint8Array.from(atob(row[1]), (ch) => ch.charCodeAt(0));
+    const bytes = depthRowCache[r], i = c - row[0];
+    if (i < 0) return Infinity;            // seaward of the shelf span
+    if (i >= bytes.length) return null;    // landward of it
+    const v = bytes[i];
+    return v === 255 ? null : v === 254 ? Infinity : v / 4;
+  }
+
+  function showDepthProbe(latlng) {
+    if (drawMode) return;
+    const d = depthAt(latlng.lat, latlng.lng);
+    const max = (window.DEPTH_GRID && window.DEPTH_GRID.max) || 60;
+    const num = d == null ? "—" : d === Infinity ? `>${max}` : d < 1 ? "<1" : d.toFixed(d < 10 ? 1 : 0);
+    const where = d == null ? "יבשה או מחוץ לאזור המפה"
+      : d <= SHALLOW_LIMIT ? "בתוך רצועת הסקר" : "מחוץ לרצועת הסקר";
+    const html = `<div class="probe">
+      <div class="probe-num"><b>${num}</b><span>מ'</span></div>
+      <div class="probe-where ${d != null && d <= SHALLOW_LIMIT ? "in" : ""}">${where}</div>
+      <div class="probe-wide hint">עומק משוער לפי מודל EMODnet (רזולוציה ~115 מ'). לא לניווט.</div>
+      <div class="probe-wide coords"><span>${ddm(latlng.lat, "N", "S", 2)} ${ddm(latlng.lng, "E", "W", 3)}</span></div>
+      ${d != null ? `<div class="card-actions"><button class="btn btn-primary small" data-act="survey-here" data-lat="${latlng.lat}" data-lng="${latlng.lng}">סקר כאן</button></div>` : ""}
+    </div>`;
+    L.popup({ maxWidth: 300, minWidth: 260, className: "probe-popup" }).setLatLng(latlng).setContent(html).openOn(map);
+  }
+
   // Degrees and decimal minutes, as on a boat GPS: 32°06.576′N
   function ddm(v, pos, neg, degDigits) {
     const a = Math.abs(v), d = Math.floor(a), m = (a - d) * 60;
@@ -1458,6 +1495,7 @@
     return {
       id: uid("survey"), siteId: site ? site.id : "", isNew: true,
       lat: pos ? +pos.lat.toFixed(6) : null, lng: pos ? +pos.lng.toFixed(6) : null,
+      modelDepth: pos ? depthAt(pos.lat, pos.lng) : null,
       place: latlng || !site ? "" : site.name,
       date: today(), timeStart: "", team: "", status: "done", notDoneReason: "",
       netsFound: "no", findings: [],
@@ -1485,6 +1523,7 @@
           </select></label>
         </div>
         <div class="loc-row"><span class="mono" dir="ltr">${loc ? ddm(loc[0], "N", "S", 2) + "  " + ddm(loc[1], "E", "W", 3) : "אין מיקום"}</span>
+          ${loc ? (() => { const md = depthAt(loc[0], loc[1]); return md == null ? "" : `<span class="pill">עומק משוער ${md === Infinity ? ">60" : "~" + md.toFixed(md < 10 ? 1 : 0)} מ'</span>`; })() : ""}
           <button type="button" class="btn btn-ghost small" id="move-point">הזז את הנקודה במפה</button></div>
         </fieldset>
         <fieldset><legend>פרטי הסקר</legend><div class="grid">
