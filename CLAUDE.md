@@ -9,7 +9,24 @@ sun, often no reception) and the manager planning on desktop.
 
 Live site: https://yuvalbp.github.io/Divepoints/ (GitHub Pages, served from
 the default branch `claude/diving-sites-interactive-map-07gxv1`, root folder).
-The repo owner (Yuval) speaks Hebrew; answer in Hebrew.
+The repo owner (Yuval) speaks Hebrew; answer in Hebrew, short and direct,
+with exact click paths when he has to do something in a console (he often
+works from a phone). Don't wrap up the conversation: when a topic is done,
+ask what else he needs.
+
+## Current state (keep this section up to date)
+- Live and in use: GitHub Pages enabled, repo `YuvalBP/Divepoints` is public,
+  default branch = the working branch above. Pushing to it deploys in ~1 min.
+- Firebase project `divepoints-c2bac` is set up: Google sign-in enabled,
+  `yuvalbp.github.io` in Authorized domains, Firestore (eur3, production) with
+  `firestore.rules` published, web config in `data/firebase-config.js`.
+- Yuval signed in first, so he is the map manager (`meta/owner`). He adds
+  divers by Gmail in the app: menu ⋯ → ניהול צוות. Next step on his side:
+  invite the team and run a first real field survey.
+- Known field issue: his phone's Wi-Fi couldn't resolve accounts.google.com
+  (DNS_PROBE_FINISHED_BAD_CONFIG); cellular data works. Not an app bug.
+- A WhatsApp onboarding message for the team was drafted in chat (link,
+  Google sign-in, "+ סקר" flow, layer meanings); regenerate if asked.
 
 ## Stack and layout
 Static site, no build step for the app itself: `index.html`, `css/style.css`,
@@ -29,6 +46,21 @@ Data files in `data/` are plain `window.X = …` scripts:
 Each `tools/*.py` documents its inputs at the top. They need numpy, scipy,
 matplotlib, shapely, tifffile, pillow (use a venv). EMODnet grid comes from
 the WCS URL in `build_bathy.py`.
+
+## Survey record (Firestore `surveys/{id}`, same shape in localStorage)
+`id, siteId ("" = independent point), lat, lng, place, modelDepth, date,
+timeStart, team, status (done | partial | not-done), notDoneReason,
+netsFound (yes | no), findings[{type, amount, size, depth, removed
+(yes | partial | no), notes, lat, lng}], siteDescription, bottomType,
+marineLife, water{visibility, temp, current, currentDir, seaState, wind,
+notes}, dive{entry, maxDepth, duration, divers, description}, route[[lat,lng]],
+routeSource (drawn | gps | gpx), createdAt, updatedAt, createdBy{name,email},
+updatedBy{name,email}`. Result colour key (`surveyStatusKey`): not-done →
+aborted, netsFound → nets, partial → partial, else clean. Finding types and
+labels live in `FINDING_TYPES` in `js/app.js`.
+Other collections: `sites` (custom dive sites), `edits/{siteId}` (position
+fixes/verification of built-in sites), `ridges` (team-drawn polygons
+`coords`), `ridgeFlags/{autoId}` (`hidden: true` hides an auto ridge).
 
 ## Data and sync
 - Hosted site: **Firebase** (project `divepoints-c2bac`): Google sign-in +
@@ -80,7 +112,21 @@ No test runner in the repo; tests were Playwright scripts run ad hoc:
   time `map.panBy` frames (target ≲ 60 ms).
 - `page.evaluate` must not return Leaflet objects (wrap setView in braces).
 
+## Environment notes for future sessions
+- Overpass: `overpass-api.de` often resets; `maps.mail.ru/osm/tools/overpass/api/interpreter`
+  worked; split big queries into small bboxes. OSM API (`api.openstreetmap.org/api/0.6/way/{id}/full.json`)
+  is reliable for single ways.
+- Imagery tiles: `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2023_3857/default/g/{z}/{y}/{x}.jpg`.
+- gov.il links for the official dive-site list returned 404.
+- A claude.ai artifact copy exists at https://claude.ai/artifact/WU3SiPFGD71BHeJjiUzQ8a
+  (old version, separate data store); don't point users there.
+- Commit messages: English, imperative subject, body explains why.
+
 ## Known gaps / ideas
 - Stream mouths (nets snag there) not mapped: Overpass kept timing out.
 - Ridge detection is weak where rock touches the shore (e.g. Dor).
 - Photos of findings are not supported yet (would need Firebase Storage).
+- Survey export is per device (JSON/GeoJSON/CSV from menu → נתונים); no
+  team-wide report/dashboard yet.
+- No "my location" on the map yet (GPS route recording exists in the form).
+- Ridge editing is add/delete only (no vertex editing, no notes on ridges).
