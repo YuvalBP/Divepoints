@@ -41,6 +41,7 @@ Data files in `data/` are plain `window.X = …` scripts:
 | `data/places.js` | coastal place names (OSM) | `tools/build_places.py` |
 | `data/ridges.js` | candidate rocky ridges detected from Sentinel-2 imagery | `tools/build_ridges.py` |
 | `data/firebase-config.js` | Firebase web config (not secret; access is enforced by rules) | by hand |
+| `manifest.webmanifest`, `icons/` | home-screen shortcut: name, standalone display, icons (PNGs rendered from `icons/icon.svg`, the header logo on navy) | by hand + headless Chromium screenshot |
 | `tiles/{z}/{x}/{y}.jpg` | bundled Sentinel-2 cloudless 2023 tiles (EOX, CC BY-NC-SA), z8–14 coastal strip, 504 files | download script (see git history) |
 
 Each `tools/*.py` documents its inputs at the top. They need numpy, scipy,
