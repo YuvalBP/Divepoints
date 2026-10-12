@@ -52,8 +52,8 @@
     <aside id="panel" class="panel" aria-label="אתרים">
       <button class="panel-handle" id="panel-handle" aria-label="הרחב או כווץ את הרשימה"><span></span></button>
       <div class="tabs" role="tablist">
-        <button role="tab" data-tab="log" aria-selected="true">יומן סקרים</button>
-        <button role="tab" data-tab="sites" aria-selected="false">אתרי צלילה</button>
+        <button role="tab" data-tab="log" aria-selected="true">יומן סקרים <span class="tab-n" id="tab-log-n"></span></button>
+        <button role="tab" data-tab="sites" aria-selected="false">אתרי צלילה <span class="tab-n" id="tab-sites-n"></span></button>
       </div>
       <div class="panel-scroll" id="pane-log">
         <section class="progress" aria-label="סיכום הסקרים">
@@ -105,6 +105,11 @@
 
     <main id="map" aria-label="מפה"></main>
   </div>
+
+  <!-- Phones: the main action sits under the thumb -->
+  <button id="fab-survey" class="fab" aria-label="סקר חדש">
+    <svg width="26" height="26" viewBox="0 0 26 26" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M13 4v18M4 13h18"/></svg>
+  </button>
 
   <!-- Floating toolbar for map-drawing modes -->
   <div id="draw-bar" class="draw-bar hidden" role="status">

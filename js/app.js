@@ -488,28 +488,29 @@
       errorTileUrl: EMPTY_TILE, maxZoom: 18, bounds: COAST_BOUNDS,
       attribution: 'Sentinel-2 cloudless 2023 by <a href="https://s2maps.eu" target="_blank" rel="noopener">EOX</a>',
     };
-    const satellite = L.layerGroup([
-      // The wide layer also covers the hinterland, so the overview has no edge.
-      L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 8, maxNativeZoom: 10, bounds: [[30.9, 32.4], [33.7, 37.9]] })),
+    satOpts.keepBuffer = 1;   // fewer off-screen tiles to move while panning on phones
+    // The wide layer also covers the hinterland, so the overview has no edge.
+    const satWide = L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 8, maxNativeZoom: 10, bounds: [[30.9, 32.4], [33.7, 37.9]] }));
+    const satFine = L.layerGroup([
       L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 11, maxNativeZoom: 12 })),
       L.tileLayer("tiles/{z}/{x}/{y}.jpg", Object.assign({}, satOpts, { minZoom: 13, maxNativeZoom: 14 })),
     ]);
 
-    // Chart: depth bands (EMODnet) under OSM land. Always drawn; it shows
-    // through wherever satellite tiles are missing.
+    // Chart: depth bands (EMODnet) under OSM land. Drawn only in chart mode:
+    // under imagery it would be redrawn on every pan for nothing.
     const canvas = L.canvas({ pane: "chart", padding: 0.3 });
     const feats = (window.BATHY && window.BATHY.features) || [];
     const fc = (pred) => ({ type: "FeatureCollection", features: feats.filter(pred) });
     const bands = L.geoJSON(fc((f) => f.properties.kind === "band"),
-      { renderer: canvas, interactive: false, style: bandStyle, attribution: "עומקים: EMODnet Bathymetry" });
+      { renderer: canvas, interactive: false, style: bandStyle, smoothFactor: 1.5, attribution: "עומקים: EMODnet Bathymetry" });
     const land = L.geoJSON(window.COAST_LAND || null,
-      { renderer: canvas, interactive: false, style: landStyle, attribution: "© OpenStreetMap" });
+      { renderer: canvas, interactive: false, style: landStyle, smoothFactor: 1.5, attribution: "© OpenStreetMap" });
     const isobaths = L.geoJSON(fc((f) => f.properties.kind === "isobath" && f.properties.depth !== SHALLOW_LIMIT),
-      { renderer: L.canvas({ pane: "iso", padding: 0.3 }), interactive: false, style: isoStyle });
+      { renderer: L.canvas({ pane: "iso", padding: 0.3 }), interactive: false, style: isoStyle, smoothFactor: 1.5 });
     // The 15 m isobath: outer edge of the survey belt, always on top.
     const surveyLine = L.geoJSON(fc((f) => f.properties.kind === "isobath" && f.properties.depth === SHALLOW_LIMIT),
       { pane: "surveyLine", interactive: false, style: surveyStyle });
-    chartLayers = { bands, land, isobaths, surveyLine, satellite };
+    chartLayers = { bands, land, isobaths, surveyLine, satWide, satFine };
     // Hosted outside Claude (e.g. GitHub Pages) live tile services load:
     // sharper imagery over the bundled tiles, and a street map.
     chartLayers.live = IN_CLAUDE ? null : {
@@ -519,9 +520,10 @@
         { maxZoom: 19, attribution: "© OpenStreetMap contributors" }),
     };
 
-    // Labels: depth figures along isobaths + coastal place names. Which
-    // ones show is decided in CSS from the zoom classes on the container.
-    const labels = L.layerGroup();
+    // Labels: depth figures along isobaths + coastal place names, one group
+    // per kind, each on the map only from its zoom (keeps the DOM small).
+    labelGroups = { iso: L.layerGroup() };
+    const labelIcon = (cls, html) => L.divIcon({ className: "map-label " + cls, html, iconSize: null });
     for (const f of feats) {
       const d = f.properties.depth;
       if (f.properties.kind !== "isobath" || d > 50) continue;
@@ -529,16 +531,15 @@
       if (cs.length < 12) continue;
       const step = Math.max(30, Math.floor(cs.length / 3));
       for (let i = Math.floor(step / 2); i < cs.length; i += step) {
-        labels.addLayer(L.marker([cs[i][1], cs[i][0]], {
+        labelGroups.iso.addLayer(L.marker([cs[i][1], cs[i][0]], {
           pane: "labels", interactive: false, keyboard: false,
-          icon: L.divIcon({ className: "map-label iso" + (d === SHALLOW_LIMIT ? " survey" : ""), html: `${d}`, iconSize: null }),
+          icon: labelIcon("iso" + (d === SHALLOW_LIMIT ? " survey" : ""), `${d}`),
         }));
       }
     }
     for (const p of window.PLACES || []) {
-      labels.addLayer(L.marker([p.lat, p.lng], {
-        pane: "labels", interactive: false, keyboard: false,
-        icon: L.divIcon({ className: `map-label place k-${p.k}`, html: esc(p.n), iconSize: null }),
+      (labelGroups[p.k] = labelGroups[p.k] || L.layerGroup()).addLayer(L.marker([p.lat, p.lng], {
+        pane: "labels", interactive: false, keyboard: false, icon: labelIcon(`place k-${p.k}`, esc(p.n)),
       }));
     }
 
@@ -555,7 +556,7 @@
     routesLayer = L.layerGroup();
     tempLayer = L.layerGroup();
 
-    [bands, land, satellite, isobaths, surveyLine, labels, ridgeLayer, linesLayer, clusterLayer, routesLayer, surveyLayer, tempLayer]
+    [isobaths, surveyLine, linesLayer, clusterLayer, routesLayer, surveyLayer, tempLayer]
       .forEach((l) => l.addTo(map));
     addMapControls();
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
@@ -563,6 +564,8 @@
     const syncZoom = () => {
       const z = map.getZoom(), el = map.getContainer();
       for (let i = 8; i <= 18; i++) el.classList.toggle("zg" + i, z >= i);
+      syncLabels();
+      applyLayer("ridges");
     };
     map.on("zoomend", syncZoom);
     map.on("click", onMapClick);
@@ -579,6 +582,19 @@
     new MutationObserver(restyle).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
+  const LABEL_MIN_ZOOM = { iso: 12, city: 9, town: 10, village: 12, mouth: 12, beach: 14 };
+  let labelGroups = {};
+  function syncLabels() {
+    const z = map.getZoom();
+    for (const [k, g] of Object.entries(labelGroups)) {
+      let on = z >= (LABEL_MIN_ZOOM[k] || 12);
+      if (k === "iso" && layerPref.iso === false) on = false;
+      if (mapMode === "streets" && k !== "iso") on = false;   // street tiles carry their own names
+      if (on && !map.hasLayer(g)) g.addTo(map);
+      if (!on && map.hasLayer(g)) map.removeLayer(g);
+    }
+  }
+
   function restyleChart() {
     chartLayers.bands.setStyle(bandStyle);
     chartLayers.land.setStyle(landStyle);
@@ -590,7 +606,9 @@
     mapMode = mode;
     const live = chartLayers.live || {};
     const want = {
-      bundled: mode === "sat" || mode === "streets",  // also a fallback under the street map
+      chart: mode === "chart",
+      satWide: mode === "sat",
+      satFine: mode === "sat" && !live.sat,   // live imagery replaces the bundled detail
       liveSat: mode === "sat" && live.sat,
       streets: mode === "streets" && live.streets,
     };
@@ -599,7 +617,10 @@
       if (on && !map.hasLayer(layer)) layer.addTo(map);
       if (!on && map.hasLayer(layer)) map.removeLayer(layer);
     };
-    toggle(chartLayers.satellite, want.bundled);
+    toggle(chartLayers.bands, want.chart);
+    toggle(chartLayers.land, want.chart);
+    toggle(chartLayers.satWide, want.satWide);
+    toggle(chartLayers.satFine, want.satFine);
     toggle(live.sat, want.liveSat);
     toggle(live.streets, want.streets);
     map.getContainer().classList.toggle("mode-sat", mode === "sat");
@@ -607,6 +628,7 @@
     document.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
     restyleChart();
     if (ridgeLayer) renderRidges();
+    if (labelGroups.iso) syncLabels();
   }
 
   function fitCoast() {
@@ -630,6 +652,11 @@
           <details class="layers" id="layers">
             <summary><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M9 2l7 4-7 4-7-4 7-4z"/><path d="M2 9.5l7 4 7-4M2 13l7 4 7-4"/></svg><span>שכבות</span></summary>
             <div class="layers-body">
+              <div class="seg in-layers" role="group" aria-label="סוג מפה">
+                <button type="button" data-mode="sat" aria-pressed="true">לוויין</button>
+                <button type="button" data-mode="chart" aria-pressed="false">מפה ימית</button>
+                ${IN_CLAUDE ? "" : `<button type="button" data-mode="streets" aria-pressed="false">רחובות</button>`}
+              </div>
               <label><input type="checkbox" data-layer="surveys" checked><i class="sw survey"></i>נקודות סקר</label>
               <label><input type="checkbox" data-layer="routes" checked><i class="sw route"></i>מסלולים וממצאים</label>
               <label><input type="checkbox" data-layer="ridges" checked><i class="sw ridge"></i>רכסים תת-ימיים</label>
@@ -820,7 +847,7 @@
   function focusSurvey(id) {
     const s = state.surveys.find((x) => x.id === id);
     if (!s) return;
-    if (isPhone()) $("#panel").classList.remove("open");
+    if (isPhone()) setSheet(false);
     const loc = surveyLoc(s);
     if (!loc) { openSurveyForm(clone(s)); return; }
     if (s.lat == null && s.siteId) { focusSite(s.siteId); return; }
@@ -856,7 +883,7 @@
     const hidden = (id) => state.ridgeFlags[id] && state.ridgeFlags[id].hidden;
     const auto = ((window.AUTO_RIDGES && window.AUTO_RIDGES.features) || []).filter((f) => !hidden(f.properties.id));
     L.geoJSON({ type: "FeatureCollection", features: auto }, {
-      renderer: ridgeRenderer, style: ridgeStyle(false),
+      renderer: ridgeRenderer, style: ridgeStyle(false), smoothFactor: 1.5,
       onEachFeature: (f, l) => l.on("click", (e) => openRidgePopup(e.latlng, { auto: true, id: f.properties.id, area: f.properties.area })),
     }).addTo(ridgeLayer);
     for (const r of state.ridges) {
@@ -928,18 +955,26 @@
     return { sites: [clusterLayer, linesLayer], ridges: [ridgeLayer], surveys: [surveyLayer],
       routes: [routesLayer], iso: [chartLayers.isobaths] }[key];
   }
-  function setLayer(key, on) {
+  // What the user asked for per layer; ridges also wait for zoom 11 (too
+  // small to see below it, and costly to redraw on every pan).
+  const layerPref = {};
+  const RIDGE_MIN_ZOOM = 11;
+  function applyLayer(key) {
+    let on = layerPref[key] !== false;
+    if (key === "ridges" && map.getZoom() < RIDGE_MIN_ZOOM) on = false;
     for (const l of layerObjects(key)) {
       if (on && !map.hasLayer(l)) l.addTo(map);
       if (!on && map.hasLayer(l)) map.removeLayer(l);
     }
-    if (key === "iso") map.getContainer().classList.toggle("no-iso", !on);
+    if (key === "iso") { map.getContainer().classList.toggle("no-iso", !on); syncLabels(); }
+  }
+  function setLayer(key, on) {
+    layerPref[key] = on;
+    applyLayer(key);
     const cb = document.querySelector(`[data-layer="${key}"]`);
     if (cb) cb.checked = on;
-    try {
-      localStorage.setItem("divepoints-layers",
-        JSON.stringify(Object.fromEntries(LAYER_KEYS.map((k) => [k, map.hasLayer(layerObjects(k)[0])]))));
-    } catch (e) { /* storage unavailable: the choice just isn't remembered */ }
+    try { localStorage.setItem("divepoints-layers", JSON.stringify(layerPref)); }
+    catch (e) { /* storage unavailable: the choice just isn't remembered */ }
   }
   function restoreLayers() {
     let saved = {};
@@ -956,6 +991,7 @@
     const items = all.reduce((n, s) => n + findingsCount(s), 0);
     const removed = all.reduce((n, s) => n + removedCount(s), 0);
     $("#log-count").textContent = all.length;
+    $("#tab-log-n").textContent = all.length || "";
     $("#log-sub").innerHTML = `<span><b>${nets}</b> עם רשתות</span><span><b>${items}</b> ממצאים</span><span><b>${removed}</b> הוסרו</span>`;
     const counts = {};
     for (const s of all) { const k = surveyStatusKey(s); counts[k] = (counts[k] || 0) + 1; }
@@ -997,7 +1033,7 @@
       document.querySelectorAll("[data-tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
       $("#pane-log").classList.toggle("hidden", b.dataset.tab !== "log");
       $("#pane-sites").classList.toggle("hidden", b.dataset.tab !== "sites");
-      if (isPhone()) $("#panel").classList.add("open");
+      if (isPhone()) setSheet(true);
     }));
     $("#log-search").addEventListener("input", renderLog);
     $("#log-chips").addEventListener("click", (e) => {
@@ -1014,6 +1050,33 @@
       const li = e.target.closest("[data-sid]");
       if (li && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); focusSurvey(li.dataset.sid); }
     });
+  }
+
+  // Phones: bottom sheet opens with a swipe up on its top edge, closes with a
+  // swipe down or a tap on the map; the FAB hides while it is open.
+  function setSheet(open) {
+    $("#panel").classList.toggle("open", open);
+    document.body.classList.toggle("sheet-open", open);
+  }
+  function initSheet() {
+    const panel = $("#panel");
+    let y0 = null;
+    const start = (e) => { y0 = e.touches[0].clientY; };
+    const end = (e) => {
+      if (y0 == null) return;
+      const dy = e.changedTouches[0].clientY - y0;
+      y0 = null;
+      if (dy < -30) setSheet(true);
+      else if (dy > 30) setSheet(false);
+    };
+    for (const el of [$("#panel-handle"), panel.querySelector(".tabs")]) {
+      el.addEventListener("touchstart", start, { passive: true });
+      el.addEventListener("touchend", end, { passive: true });
+    }
+    $("#panel-handle").addEventListener("click", () => setSheet(!panel.classList.contains("open")));
+    map.on("click", () => { if (isPhone() && !drawMode && panel.classList.contains("open")) setSheet(false); });
+    map.on("dragstart", () => { if (isPhone() && panel.classList.contains("open")) setSheet(false); });
+    $("#fab-survey").addEventListener("click", startNewSurvey);
   }
 
   function initMenu() {
@@ -1109,6 +1172,7 @@
     const counts = {};
     for (const s of all) { const k = siteStatus(s.id); counts[k] = (counts[k] || 0) + 1; }
     $("#done-count").textContent = all.length - (counts.unsurveyed || 0);
+    $("#tab-sites-n").textContent = all.length;
     $("#total-count").textContent = all.length;
     // The coast as a barcode: one tick per site, north to south; colour is
     // survey status, height is net risk.
@@ -1158,7 +1222,7 @@
   function focusSite(id) {
     const m = markerById[id];
     if (!m) return;
-    if (isPhone()) $("#panel").classList.remove("open");
+    if (isPhone()) setSheet(false);
     map.setView(m.getLatLng(), Math.max(map.getZoom(), 14));
     setTimeout(() => m.openPopup(), 400);
   }
@@ -1196,7 +1260,7 @@
       $("#panel").classList.toggle("collapsed");
       setTimeout(() => map.invalidateSize(), 50);
     });
-    $("#panel-handle").addEventListener("click", () => $("#panel").classList.toggle("open"));
+
     $("#coastbar").addEventListener("click", (e) => {
       const b = e.target.closest(".tick");
       if (b) focusSite(b.dataset.id);
@@ -1860,6 +1924,7 @@
   initSidebar();
   initTabs();
   initMenu();
+  initSheet();
   setSyncBadge();
   restoreLayers();
   renderAll();

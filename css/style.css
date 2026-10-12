@@ -634,3 +634,68 @@ body.is-owner .owner-only, body.signed-in .signed-only { display: block; }
 .empty .t { display: block; font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
 /* Fact values mix numbers and Hebrew words: Plex Sans with tabular figures */
 .facts dd { font-family: var(--font-ui); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* ================================================================ phones
+   Map first: a thin tab bar at the bottom (swipe up for the full sheet),
+   one thumb-sized "+ survey" button, and just two map buttons. */
+.fab { display: none; }
+.map-tools .seg.in-layers { display: none; }
+.tab-n { font-family: var(--font-data); font-size: 12px; font-weight: 500; color: var(--muted); vertical-align: middle; }
+.tab-n:empty { display: none; }
+
+@media (max-width: 760px) {
+  :root { --bar-h: 50px; }
+  .bar { height: 50px; padding-inline: 10px; }
+  .brand svg { width: 24px; height: 24px; }
+  .brand h1 { font-size: 24px; }
+  #new-survey-btn, #toggle-panel { display: none; }
+
+  /* Bottom sheet: only the tab bar peeks */
+  .panel {
+    --peek: 58px;
+    height: 80vh; height: 80dvh;
+    transform: translateY(calc(100% - var(--peek) - env(safe-area-inset-bottom, 0px)));
+    border-radius: 18px 18px 0 0;
+  }
+  .panel.open { transform: translateY(0); }
+  .panel-handle { padding: 6px 0 0; height: 14px; }
+  .panel-handle span { width: 44px; height: 5px; }
+  .tabs { padding: 0 12px; border-bottom-color: transparent; }
+  .panel.open .tabs { border-bottom-color: var(--rule); }
+  .tabs button { font-size: 20px; padding: 4px 4px 8px; }
+  .panel-scroll { overscroll-behavior: contain; }
+  .leaflet-bottom { bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .leaflet-control-scale { display: none; }
+  .leaflet-container .leaflet-control-attribution { max-width: 60vw; font-size: 9px; opacity: .8; }
+
+  /* Main action under the thumb (right side in RTL) */
+  .fab {
+    display: flex; align-items: center; justify-content: center;
+    position: fixed; z-index: 1250; inset-inline-start: 16px;
+    bottom: calc(58px + 16px + env(safe-area-inset-bottom, 0px));
+    width: 60px; height: 60px; border-radius: 50%; border: none;
+    background: var(--survey); color: #fff; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  }
+  .fab:active { transform: scale(.94); }
+  body.sheet-open .fab, body:has(#draw-bar:not(.hidden)) .fab, body:has(#modal:not(.hidden)) .fab { display: none; }
+
+  /* Map tools: just layers and legend, icon-sized */
+  .map-tools { gap: 6px; }
+  .map-tools > .seg { display: none; }
+  .map-tools .seg.in-layers { display: flex; margin: 4px 0 6px; }
+  .map-tools .seg.in-layers button { flex: 1; font-size: 17px; }
+  .map-tools .layers summary span { display: none; }
+  .map-tools .layers summary, .map-tools .legend summary { min-height: 44px; min-width: 44px; justify-content: center; padding: 0 10px; }
+  .map-tools .layers[open] { width: min(260px, calc(100vw - 32px)); max-width: none; }
+  .map-tools .layers-body label { padding: 10px 6px; }
+  .map-tools .legend summary::after { display: none; }
+
+  /* Site / survey cards fit the screen */
+  .leaflet-popup-content { width: min(290px, calc(100vw - 48px)) !important; }
+  .card-body h3 { font-size: 30px; }
+
+  /* Drawing bar sits above the tab bar */
+  .draw-bar { bottom: calc(58px + 12px + env(safe-area-inset-bottom, 0px)); }
+  .toast { bottom: calc(58px + 12px + env(safe-area-inset-bottom, 0px)); }
+}
