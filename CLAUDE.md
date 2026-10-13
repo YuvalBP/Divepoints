@@ -41,7 +41,7 @@ Data files in `data/` are plain `window.X = …` scripts:
 | `data/places.js` | coastal place names (OSM) | `tools/build_places.py` |
 | `data/ridges.js` | candidate rocky ridges detected from Sentinel-2 imagery | `tools/build_ridges.py` |
 | `data/firebase-config.js` | Firebase web config (not secret; access is enforced by rules) | by hand |
-| `manifest.webmanifest`, `icons/` | home-screen shortcut: name, standalone display, icons (PNGs rendered from `icons/icon.svg`, the header logo on navy) | by hand + headless Chromium screenshot |
+| `manifest.webmanifest`, `icons/` | installable app (name "Divepoints"): name, standalone display, icons (PNGs rendered from `icons/icon.svg`, the header logo on navy) | by hand + headless Chromium screenshot |
 | `tiles/{z}/{x}/{y}.jpg` | bundled Sentinel-2 cloudless 2023 tiles (EOX, CC BY-NC-SA), z8–14 coastal strip, 504 files | download script (see git history) |
 
 Each `tools/*.py` documents its inputs at the top. They need numpy, scipy,
@@ -74,6 +74,12 @@ fixes/verification of built-in sites), `ridges` (team-drawn polygons
 - Firestore can't store nested arrays: point lists (`route`, `coords`) are
   encoded as `[{lat,lng}]` in `persist()` and decoded in `subscribeAll()`.
 - With `FIREBASE_CONFIG = null` the app runs local-only (localStorage).
+- `sw.js` (registered at the end of `app.js`): app files network-first with a
+  3.5 s fallback to cache (so deploys show on next launch despite GitHub
+  Pages' 10-min HTTP cache, and the app opens offline); bundled tiles, icons
+  and version-pinned CDN libs cache-first. A new data file or CDN version
+  must be added to `SHELL`/`PINNED` there. Tested with Playwright: update
+  visible on reload, offline launch, slow-network fallback.
 - `dist/divepoints.html` (+ tiles) is an older claude.ai artifact build
   (`tools/build_artifact.py`) using the artifact `db` capability. The hosted
   site is the single source of truth now; the artifact is not maintained.
