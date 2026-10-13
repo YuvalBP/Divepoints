@@ -1087,9 +1087,19 @@
       const b = e.target.closest("[data-menu]");
       if (!b) return;
       menu.open = false;
-      ({ "add-site": startAddSite, "draw-ridge": startDrawRidge, data: openData, team: openTeam, signout: signOut })[b.dataset.menu]();
+      ({ "add-site": startAddSite, "draw-ridge": startDrawRidge, data: openData, team: openTeam, signout: signOut, share: shareLink })[b.dataset.menu]();
     });
     document.addEventListener("click", (e) => { if (!e.target.closest("#menu")) menu.open = false; });
+  }
+
+  // The installed app has no address bar, so the link has to come from the UI.
+  function shareLink() {
+    const url = location.origin + location.pathname;
+    const copy = () => navigator.clipboard.writeText(url).then(() => toast("הקישור הועתק"), () => toast(url));
+    if (navigator.share) {
+      navigator.share({ title: "Divepoints", text: "סקר רשתות רפאים – סיירת החוף", url })
+        .catch((e) => { if (e.name !== "AbortError") copy(); });
+    } else copy();
   }
 
   // ------------------------------------------------------------ depth probe
